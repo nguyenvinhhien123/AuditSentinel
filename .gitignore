@@ -1,0 +1,31 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.backup
+*.backup.*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local data and generated artifacts
+/dataset/raw/
+/dataset/processed/
+/dataset/quarantine/
+/dataset/samples/*
+!/dataset/samples/auditsentinel_training_sample.csv
+/models/
+/logs/*
+/reports/*
+/sessions/
+
+# User-selected icon; public clones use the bundled default icon instead.
+/assets/auditsentinel.ico
+
+# Local environment and editor state
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+*.log

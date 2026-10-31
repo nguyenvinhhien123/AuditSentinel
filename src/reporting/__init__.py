@@ -1,0 +1,1 @@
+"""Generate local operational reports."""

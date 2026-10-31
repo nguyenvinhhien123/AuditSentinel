@@ -1,0 +1,181 @@
+﻿timestamp,source_ip,username,action,status,query,label
+2026-01-01T08:00:00+00:00,192.0.2.10,app_user_00,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1000",normal
+2026-01-01T08:03:00+00:00,192.0.2.11,app_user_01,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1001",normal
+2026-01-01T08:06:00+00:00,192.0.2.12,app_user_02,UPDATE,success,UPDATE user_profile SET display_name = value_1002 WHERE account_id = 1002,normal
+2026-01-01T08:09:00+00:00,192.0.2.13,app_user_03,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1003, login)",normal
+2026-01-01T08:12:00+00:00,192.0.2.14,app_user_04,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1004",normal
+2026-01-01T08:15:00+00:00,192.0.2.15,app_user_05,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1005,normal
+2026-01-01T08:18:00+00:00,192.0.2.16,app_user_06,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1006",normal
+2026-01-01T08:21:00+00:00,192.0.2.17,app_user_07,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1007",normal
+2026-01-01T08:24:00+00:00,192.0.2.18,app_user_00,UPDATE,success,UPDATE user_profile SET display_name = value_1008 WHERE account_id = 1008,normal
+2026-01-01T08:27:00+00:00,192.0.2.19,app_user_01,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1009, login)",normal
+2026-01-01T08:30:00+00:00,192.0.2.20,app_user_02,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1010",normal
+2026-01-01T08:33:00+00:00,192.0.2.21,app_user_03,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1011,normal
+2026-01-01T08:36:00+00:00,192.0.2.22,app_user_04,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1012",normal
+2026-01-01T08:39:00+00:00,192.0.2.23,app_user_05,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1013",normal
+2026-01-01T08:42:00+00:00,192.0.2.24,app_user_06,UPDATE,success,UPDATE user_profile SET display_name = value_1014 WHERE account_id = 1014,normal
+2026-01-01T08:45:00+00:00,192.0.2.25,app_user_07,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1015, login)",normal
+2026-01-01T08:48:00+00:00,192.0.2.26,app_user_00,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1016",normal
+2026-01-01T08:51:00+00:00,192.0.2.27,app_user_01,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1017,normal
+2026-01-01T08:54:00+00:00,192.0.2.28,app_user_02,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1018",normal
+2026-01-01T08:57:00+00:00,192.0.2.29,app_user_03,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1019",normal
+2026-01-01T09:00:00+00:00,192.0.2.10,app_user_04,UPDATE,success,UPDATE user_profile SET display_name = value_1020 WHERE account_id = 1020,normal
+2026-01-01T09:03:00+00:00,192.0.2.11,app_user_05,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1021, login)",normal
+2026-01-01T09:06:00+00:00,192.0.2.12,app_user_06,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1022",normal
+2026-01-01T09:09:00+00:00,192.0.2.13,app_user_07,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1023,normal
+2026-01-01T09:12:00+00:00,192.0.2.14,app_user_00,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1024",normal
+2026-01-01T09:15:00+00:00,192.0.2.15,app_user_01,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1025",normal
+2026-01-01T09:18:00+00:00,192.0.2.16,app_user_02,UPDATE,success,UPDATE user_profile SET display_name = value_1026 WHERE account_id = 1026,normal
+2026-01-01T09:21:00+00:00,192.0.2.17,app_user_03,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1027, login)",normal
+2026-01-01T09:24:00+00:00,192.0.2.18,app_user_04,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1028",normal
+2026-01-01T09:27:00+00:00,192.0.2.19,app_user_05,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1029,normal
+2026-01-01T09:30:00+00:00,192.0.2.20,app_user_06,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1030",normal
+2026-01-01T09:33:00+00:00,192.0.2.21,app_user_07,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1031",normal
+2026-01-01T09:36:00+00:00,192.0.2.22,app_user_00,UPDATE,success,UPDATE user_profile SET display_name = value_1032 WHERE account_id = 1032,normal
+2026-01-01T09:39:00+00:00,192.0.2.23,app_user_01,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1033, login)",normal
+2026-01-01T09:42:00+00:00,192.0.2.24,app_user_02,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1034",normal
+2026-01-01T09:45:00+00:00,192.0.2.25,app_user_03,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1035,normal
+2026-01-01T09:48:00+00:00,192.0.2.26,app_user_04,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1036",normal
+2026-01-01T09:51:00+00:00,192.0.2.27,app_user_05,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1037",normal
+2026-01-01T09:54:00+00:00,192.0.2.28,app_user_06,UPDATE,success,UPDATE user_profile SET display_name = value_1038 WHERE account_id = 1038,normal
+2026-01-01T09:57:00+00:00,192.0.2.29,app_user_07,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1039, login)",normal
+2026-01-01T10:00:00+00:00,192.0.2.10,app_user_00,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1040",normal
+2026-01-01T10:03:00+00:00,192.0.2.11,app_user_01,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1041,normal
+2026-01-01T10:06:00+00:00,192.0.2.12,app_user_02,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1042",normal
+2026-01-01T10:09:00+00:00,192.0.2.13,app_user_03,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1043",normal
+2026-01-01T10:12:00+00:00,192.0.2.14,app_user_04,UPDATE,success,UPDATE user_profile SET display_name = value_1044 WHERE account_id = 1044,normal
+2026-01-01T10:15:00+00:00,192.0.2.15,app_user_05,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1045, login)",normal
+2026-01-01T10:18:00+00:00,192.0.2.16,app_user_06,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1046",normal
+2026-01-01T10:21:00+00:00,192.0.2.17,app_user_07,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1047,normal
+2026-01-01T10:24:00+00:00,192.0.2.18,app_user_00,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1048",normal
+2026-01-01T10:27:00+00:00,192.0.2.19,app_user_01,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1049",normal
+2026-01-01T10:30:00+00:00,192.0.2.20,app_user_02,UPDATE,success,UPDATE user_profile SET display_name = value_1050 WHERE account_id = 1050,normal
+2026-01-01T10:33:00+00:00,192.0.2.21,app_user_03,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1051, login)",normal
+2026-01-01T10:36:00+00:00,192.0.2.22,app_user_04,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1052",normal
+2026-01-01T10:39:00+00:00,192.0.2.23,app_user_05,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1053,normal
+2026-01-01T10:42:00+00:00,192.0.2.24,app_user_06,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1054",normal
+2026-01-01T10:45:00+00:00,192.0.2.25,app_user_07,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1055",normal
+2026-01-01T10:48:00+00:00,192.0.2.26,app_user_00,UPDATE,success,UPDATE user_profile SET display_name = value_1056 WHERE account_id = 1056,normal
+2026-01-01T10:51:00+00:00,192.0.2.27,app_user_01,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1057, login)",normal
+2026-01-01T10:54:00+00:00,192.0.2.28,app_user_02,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1058",normal
+2026-01-01T10:57:00+00:00,192.0.2.29,app_user_03,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1059,normal
+2026-01-01T11:00:00+00:00,192.0.2.10,app_user_04,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1060",normal
+2026-01-01T11:03:00+00:00,192.0.2.11,app_user_05,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1061",normal
+2026-01-01T11:06:00+00:00,192.0.2.12,app_user_06,UPDATE,success,UPDATE user_profile SET display_name = value_1062 WHERE account_id = 1062,normal
+2026-01-01T11:09:00+00:00,192.0.2.13,app_user_07,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1063, login)",normal
+2026-01-01T11:12:00+00:00,192.0.2.14,app_user_00,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1064",normal
+2026-01-01T11:15:00+00:00,192.0.2.15,app_user_01,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1065,normal
+2026-01-01T11:18:00+00:00,192.0.2.16,app_user_02,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1066",normal
+2026-01-01T11:21:00+00:00,192.0.2.17,app_user_03,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1067",normal
+2026-01-01T11:24:00+00:00,192.0.2.18,app_user_04,UPDATE,success,UPDATE user_profile SET display_name = value_1068 WHERE account_id = 1068,normal
+2026-01-01T11:27:00+00:00,192.0.2.19,app_user_05,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1069, login)",normal
+2026-01-01T11:30:00+00:00,192.0.2.20,app_user_06,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1070",normal
+2026-01-01T11:33:00+00:00,192.0.2.21,app_user_07,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1071,normal
+2026-01-01T11:36:00+00:00,192.0.2.22,app_user_00,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1072",normal
+2026-01-01T11:39:00+00:00,192.0.2.23,app_user_01,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1073",normal
+2026-01-01T11:42:00+00:00,192.0.2.24,app_user_02,UPDATE,success,UPDATE user_profile SET display_name = value_1074 WHERE account_id = 1074,normal
+2026-01-01T11:45:00+00:00,192.0.2.25,app_user_03,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1075, login)",normal
+2026-01-01T11:48:00+00:00,192.0.2.26,app_user_04,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1076",normal
+2026-01-01T11:51:00+00:00,192.0.2.27,app_user_05,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1077,normal
+2026-01-01T11:54:00+00:00,192.0.2.28,app_user_06,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1078",normal
+2026-01-01T11:57:00+00:00,192.0.2.29,app_user_07,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1079",normal
+2026-01-01T12:00:00+00:00,192.0.2.10,app_user_00,UPDATE,success,UPDATE user_profile SET display_name = value_1080 WHERE account_id = 1080,normal
+2026-01-01T12:03:00+00:00,192.0.2.11,app_user_01,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1081, login)",normal
+2026-01-01T12:06:00+00:00,192.0.2.12,app_user_02,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1082",normal
+2026-01-01T12:09:00+00:00,192.0.2.13,app_user_03,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1083,normal
+2026-01-01T12:12:00+00:00,192.0.2.14,app_user_04,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1084",normal
+2026-01-01T12:15:00+00:00,192.0.2.15,app_user_05,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1085",normal
+2026-01-01T12:18:00+00:00,192.0.2.16,app_user_06,UPDATE,success,UPDATE user_profile SET display_name = value_1086 WHERE account_id = 1086,normal
+2026-01-01T12:21:00+00:00,192.0.2.17,app_user_07,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1087, login)",normal
+2026-01-01T12:24:00+00:00,192.0.2.18,app_user_00,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1088",normal
+2026-01-01T12:27:00+00:00,192.0.2.19,app_user_01,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1089,normal
+2026-01-01T12:30:00+00:00,192.0.2.20,app_user_02,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1090",normal
+2026-01-01T12:33:00+00:00,192.0.2.21,app_user_03,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1091",normal
+2026-01-01T12:36:00+00:00,192.0.2.22,app_user_04,UPDATE,success,UPDATE user_profile SET display_name = value_1092 WHERE account_id = 1092,normal
+2026-01-01T12:39:00+00:00,192.0.2.23,app_user_05,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1093, login)",normal
+2026-01-01T12:42:00+00:00,192.0.2.24,app_user_06,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1094",normal
+2026-01-01T12:45:00+00:00,192.0.2.25,app_user_07,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1095,normal
+2026-01-01T12:48:00+00:00,192.0.2.26,app_user_00,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1096",normal
+2026-01-01T12:51:00+00:00,192.0.2.27,app_user_01,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1097",normal
+2026-01-01T12:54:00+00:00,192.0.2.28,app_user_02,UPDATE,success,UPDATE user_profile SET display_name = value_1098 WHERE account_id = 1098,normal
+2026-01-01T12:57:00+00:00,192.0.2.29,app_user_03,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1099, login)",normal
+2026-01-01T13:00:00+00:00,192.0.2.10,app_user_04,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1100",normal
+2026-01-01T13:03:00+00:00,192.0.2.11,app_user_05,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1101,normal
+2026-01-01T13:06:00+00:00,192.0.2.12,app_user_06,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1102",normal
+2026-01-01T13:09:00+00:00,192.0.2.13,app_user_07,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1103",normal
+2026-01-01T13:12:00+00:00,192.0.2.14,app_user_00,UPDATE,success,UPDATE user_profile SET display_name = value_1104 WHERE account_id = 1104,normal
+2026-01-01T13:15:00+00:00,192.0.2.15,app_user_01,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1105, login)",normal
+2026-01-01T13:18:00+00:00,192.0.2.16,app_user_02,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1106",normal
+2026-01-01T13:21:00+00:00,192.0.2.17,app_user_03,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1107,normal
+2026-01-01T13:24:00+00:00,192.0.2.18,app_user_04,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1108",normal
+2026-01-01T13:27:00+00:00,192.0.2.19,app_user_05,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1109",normal
+2026-01-01T13:30:00+00:00,192.0.2.20,app_user_06,UPDATE,success,UPDATE user_profile SET display_name = value_1110 WHERE account_id = 1110,normal
+2026-01-01T13:33:00+00:00,192.0.2.21,app_user_07,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1111, login)",normal
+2026-01-01T13:36:00+00:00,192.0.2.22,app_user_00,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1112",normal
+2026-01-01T13:39:00+00:00,192.0.2.23,app_user_01,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1113,normal
+2026-01-01T13:42:00+00:00,192.0.2.24,app_user_02,SELECT,success,"SELECT account_id, display_name FROM accounts WHERE account_id = 1114",normal
+2026-01-01T13:45:00+00:00,192.0.2.25,app_user_03,SELECT,success,"SELECT event_id, event_type FROM audit_events WHERE event_id = 1115",normal
+2026-01-01T13:48:00+00:00,192.0.2.26,app_user_04,UPDATE,success,UPDATE user_profile SET display_name = value_1116 WHERE account_id = 1116,normal
+2026-01-01T13:51:00+00:00,192.0.2.27,app_user_05,INSERT,success,"INSERT INTO audit_events (event_id, event_type) VALUES (1117, login)",normal
+2026-01-01T13:54:00+00:00,192.0.2.28,app_user_06,SELECT,success,"SELECT session_id, created_at FROM sessions WHERE account_id = 1118",normal
+2026-01-01T13:57:00+00:00,192.0.2.29,app_user_07,UPDATE,success,UPDATE session_status SET status = active WHERE session_id = 1119,normal
+2026-01-01T14:00:00+00:00,198.51.100.20,unknown_operator_00,GRANT,success,GRANT elevated_role TO operator_9000,attack
+2026-01-01T14:02:00+00:00,198.51.100.21,unknown_operator_01,REVOKE,success,REVOKE access_role FROM operator_9001,attack
+2026-01-01T14:04:00+00:00,198.51.100.22,unknown_operator_02,ALTER,denied,ALTER USER operator_9002 WITH ACCOUNT LOCK,attack
+2026-01-01T14:06:00+00:00,198.51.100.23,unknown_operator_03,DELETE,failed,DELETE FROM access_audit WHERE event_id = 9003,attack
+2026-01-01T14:08:00+00:00,198.51.100.24,unknown_operator_04,TRUNCATE,denied,TRUNCATE TABLE session_history,attack
+2026-01-01T14:10:00+00:00,198.51.100.25,unknown_operator_00,CREATE,failed,CREATE USER temporary_operator_9005,attack
+2026-01-01T14:12:00+00:00,198.51.100.26,unknown_operator_01,GRANT,success,GRANT elevated_role TO operator_9006,attack
+2026-01-01T14:14:00+00:00,198.51.100.27,unknown_operator_02,REVOKE,success,REVOKE access_role FROM operator_9007,attack
+2026-01-01T14:16:00+00:00,198.51.100.28,unknown_operator_03,ALTER,denied,ALTER USER operator_9008 WITH ACCOUNT LOCK,attack
+2026-01-01T14:18:00+00:00,198.51.100.29,unknown_operator_04,DELETE,failed,DELETE FROM access_audit WHERE event_id = 9009,attack
+2026-01-01T14:20:00+00:00,198.51.100.30,unknown_operator_00,TRUNCATE,denied,TRUNCATE TABLE session_history,attack
+2026-01-01T14:22:00+00:00,198.51.100.31,unknown_operator_01,CREATE,failed,CREATE USER temporary_operator_9011,attack
+2026-01-01T14:24:00+00:00,198.51.100.32,unknown_operator_02,GRANT,success,GRANT elevated_role TO operator_9012,attack
+2026-01-01T14:26:00+00:00,198.51.100.33,unknown_operator_03,REVOKE,success,REVOKE access_role FROM operator_9013,attack
+2026-01-01T14:28:00+00:00,198.51.100.34,unknown_operator_04,ALTER,denied,ALTER USER operator_9014 WITH ACCOUNT LOCK,attack
+2026-01-01T14:30:00+00:00,198.51.100.35,unknown_operator_00,DELETE,failed,DELETE FROM access_audit WHERE event_id = 9015,attack
+2026-01-01T14:32:00+00:00,198.51.100.36,unknown_operator_01,TRUNCATE,denied,TRUNCATE TABLE session_history,attack
+2026-01-01T14:34:00+00:00,198.51.100.37,unknown_operator_02,CREATE,failed,CREATE USER temporary_operator_9017,attack
+2026-01-01T14:36:00+00:00,198.51.100.20,unknown_operator_03,GRANT,success,GRANT elevated_role TO operator_9018,attack
+2026-01-01T14:38:00+00:00,198.51.100.21,unknown_operator_04,REVOKE,success,REVOKE access_role FROM operator_9019,attack
+2026-01-01T14:40:00+00:00,198.51.100.22,unknown_operator_00,ALTER,denied,ALTER USER operator_9020 WITH ACCOUNT LOCK,attack
+2026-01-01T14:42:00+00:00,198.51.100.23,unknown_operator_01,DELETE,failed,DELETE FROM access_audit WHERE event_id = 9021,attack
+2026-01-01T14:44:00+00:00,198.51.100.24,unknown_operator_02,TRUNCATE,denied,TRUNCATE TABLE session_history,attack
+2026-01-01T14:46:00+00:00,198.51.100.25,unknown_operator_03,CREATE,failed,CREATE USER temporary_operator_9023,attack
+2026-01-01T14:48:00+00:00,198.51.100.26,unknown_operator_04,GRANT,success,GRANT elevated_role TO operator_9024,attack
+2026-01-01T14:50:00+00:00,198.51.100.27,unknown_operator_00,REVOKE,success,REVOKE access_role FROM operator_9025,attack
+2026-01-01T14:52:00+00:00,198.51.100.28,unknown_operator_01,ALTER,denied,ALTER USER operator_9026 WITH ACCOUNT LOCK,attack
+2026-01-01T14:54:00+00:00,198.51.100.29,unknown_operator_02,DELETE,failed,DELETE FROM access_audit WHERE event_id = 9027,attack
+2026-01-01T14:56:00+00:00,198.51.100.30,unknown_operator_03,TRUNCATE,denied,TRUNCATE TABLE session_history,attack
+2026-01-01T14:58:00+00:00,198.51.100.31,unknown_operator_04,CREATE,failed,CREATE USER temporary_operator_9029,attack
+2026-01-01T15:00:00+00:00,198.51.100.32,unknown_operator_00,GRANT,success,GRANT elevated_role TO operator_9030,attack
+2026-01-01T15:02:00+00:00,198.51.100.33,unknown_operator_01,REVOKE,success,REVOKE access_role FROM operator_9031,attack
+2026-01-01T15:04:00+00:00,198.51.100.34,unknown_operator_02,ALTER,denied,ALTER USER operator_9032 WITH ACCOUNT LOCK,attack
+2026-01-01T15:06:00+00:00,198.51.100.35,unknown_operator_03,DELETE,failed,DELETE FROM access_audit WHERE event_id = 9033,attack
+2026-01-01T15:08:00+00:00,198.51.100.36,unknown_operator_04,TRUNCATE,denied,TRUNCATE TABLE session_history,attack
+2026-01-01T15:10:00+00:00,198.51.100.37,unknown_operator_00,CREATE,failed,CREATE USER temporary_operator_9035,attack
+2026-01-01T15:12:00+00:00,198.51.100.20,unknown_operator_01,GRANT,success,GRANT elevated_role TO operator_9036,attack
+2026-01-01T15:14:00+00:00,198.51.100.21,unknown_operator_02,REVOKE,success,REVOKE access_role FROM operator_9037,attack
+2026-01-01T15:16:00+00:00,198.51.100.22,unknown_operator_03,ALTER,denied,ALTER USER operator_9038 WITH ACCOUNT LOCK,attack
+2026-01-01T15:18:00+00:00,198.51.100.23,unknown_operator_04,DELETE,failed,DELETE FROM access_audit WHERE event_id = 9039,attack
+2026-01-01T15:20:00+00:00,198.51.100.24,unknown_operator_00,TRUNCATE,denied,TRUNCATE TABLE session_history,attack
+2026-01-01T15:22:00+00:00,198.51.100.25,unknown_operator_01,CREATE,failed,CREATE USER temporary_operator_9041,attack
+2026-01-01T15:24:00+00:00,198.51.100.26,unknown_operator_02,GRANT,success,GRANT elevated_role TO operator_9042,attack
+2026-01-01T15:26:00+00:00,198.51.100.27,unknown_operator_03,REVOKE,success,REVOKE access_role FROM operator_9043,attack
+2026-01-01T15:28:00+00:00,198.51.100.28,unknown_operator_04,ALTER,denied,ALTER USER operator_9044 WITH ACCOUNT LOCK,attack
+2026-01-01T15:30:00+00:00,198.51.100.29,unknown_operator_00,DELETE,failed,DELETE FROM access_audit WHERE event_id = 9045,attack
+2026-01-01T15:32:00+00:00,198.51.100.30,unknown_operator_01,TRUNCATE,denied,TRUNCATE TABLE session_history,attack
+2026-01-01T15:34:00+00:00,198.51.100.31,unknown_operator_02,CREATE,failed,CREATE USER temporary_operator_9047,attack
+2026-01-01T15:36:00+00:00,198.51.100.32,unknown_operator_03,GRANT,success,GRANT elevated_role TO operator_9048,attack
+2026-01-01T15:38:00+00:00,198.51.100.33,unknown_operator_04,REVOKE,success,REVOKE access_role FROM operator_9049,attack
+2026-01-01T15:40:00+00:00,198.51.100.34,unknown_operator_00,ALTER,denied,ALTER USER operator_9050 WITH ACCOUNT LOCK,attack
+2026-01-01T15:42:00+00:00,198.51.100.35,unknown_operator_01,DELETE,failed,DELETE FROM access_audit WHERE event_id = 9051,attack
+2026-01-01T15:44:00+00:00,198.51.100.36,unknown_operator_02,TRUNCATE,denied,TRUNCATE TABLE session_history,attack
+2026-01-01T15:46:00+00:00,198.51.100.37,unknown_operator_03,CREATE,failed,CREATE USER temporary_operator_9053,attack
+2026-01-01T15:48:00+00:00,198.51.100.20,unknown_operator_04,GRANT,success,GRANT elevated_role TO operator_9054,attack
+2026-01-01T15:50:00+00:00,198.51.100.21,unknown_operator_00,REVOKE,success,REVOKE access_role FROM operator_9055,attack
+2026-01-01T15:52:00+00:00,198.51.100.22,unknown_operator_01,ALTER,denied,ALTER USER operator_9056 WITH ACCOUNT LOCK,attack
+2026-01-01T15:54:00+00:00,198.51.100.23,unknown_operator_02,DELETE,failed,DELETE FROM access_audit WHERE event_id = 9057,attack
+2026-01-01T15:56:00+00:00,198.51.100.24,unknown_operator_03,TRUNCATE,denied,TRUNCATE TABLE session_history,attack
+2026-01-01T15:58:00+00:00,198.51.100.25,unknown_operator_04,CREATE,failed,CREATE USER temporary_operator_9059,attack

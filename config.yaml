@@ -1,0 +1,41 @@
+app:
+  name: "AuditSentinel"
+  version: "1.0.0"
+  environment: "local"
+  debug: false
+
+system:
+  device: "auto"
+  cpu_threads: 2
+  batch_size: 5000
+
+dataset:
+  raw_dir: "dataset/raw"
+  processed_dir: "dataset/processed"
+  quarantine_dir: "dataset/quarantine"
+  samples_dir: "dataset/samples"
+  max_file_size_gb: 10
+
+training:
+  mode: "auto"
+  test_size: 0.2
+  random_state: 42
+
+detection:
+  enabled: true
+  model_dir: "models/detection"
+
+investigation:
+  enabled: true
+  provider: "ollama"
+  model: "qwen2.5:1.5b"
+  host: "http://localhost:11434"
+
+response:
+  enabled: true
+  simulation_mode: true
+  require_approval: true
+
+logging:
+  level: "INFO"
+  directory: "logs"
