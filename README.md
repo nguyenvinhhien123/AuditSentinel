@@ -14,6 +14,11 @@ The application has three sequential roles. They are workflow agents, not three 
 
 The separate **Prevention Simulation** page can simulate approved IP/user policies against later records in an offline dataset. No real account, session, network control, database, or firewall is modified.
 
+## Work flow
+
+<img width="975" height="576" alt="image" src="https://github.com/user-attachments/assets/83fc6c79-371f-4700-b723-e9e250744dbc" />
+
+
 ## Requirements
 
 - Windows 10/11
