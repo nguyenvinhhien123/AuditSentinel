@@ -4,6 +4,9 @@
 
 AuditSentinel is a local desktop application for training and evaluating machine-learning models on database audit logs, reviewing alerts, investigating them with a local Ollama model, and preparing response proposals. Prevention and response actions are simulations only; this project does not connect to or change a live database or firewall.
 
+<img width="1475" height="991" alt="image" src="https://github.com/user-attachments/assets/d9d69fce-db45-47e9-98f9-f0a294ffc9d9" />
+
+
 ## What the agents do
 
 The application has three sequential roles. They are workflow agents, not three independent LLMs:
