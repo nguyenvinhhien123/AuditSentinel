@@ -38,7 +38,7 @@ SUSPICIOUS_SQL_PATTERNS = {
 FIELD_ALIASES = {
     "query": [
         "query", "sql", "sql_query", "statement",
-        "query_text", "command_text",
+        "query_text", "command_text", "full_query",
     ],
     "action": [
         "action", "sql_action", "event", "event_type",

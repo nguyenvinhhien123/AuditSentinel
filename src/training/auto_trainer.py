@@ -119,7 +119,7 @@ def auto_train(
     if not all(isinstance(record, dict) for record in records):
         raise TypeError("Every record must be a dictionary")
 
-    if not 0.1 <= test_size <= 0.4:
+    if test_size is not None and not 0.1 <= test_size <= 0.4:
         raise ValueError("test_size must be between 0.1 and 0.4")
 
     if not 0.0 < contamination <= 0.5:
@@ -133,11 +133,16 @@ def auto_train(
     if X.shape[1] == 0:
         raise ValueError("No usable features were generated")
 
-    train_indices, test_indices = train_test_split(
-        np.arange(len(records)),
-        test_size=test_size,
-        random_state=random_state,
-    )
+    indices = np.arange(len(records))
+    if test_size is None:
+        train_indices = indices
+        test_indices = np.asarray([], dtype=int)
+    else:
+        train_indices, test_indices = train_test_split(
+            indices,
+            test_size=test_size,
+            random_state=random_state,
+        )
 
     X_train = X[train_indices]
     X_test = X[test_indices]
@@ -174,20 +179,19 @@ def auto_train(
                 "Every class needs at least 2 records"
             )
 
-        # Use stratified split to preserve class proportions.
-        try:
-            train_indices, test_indices = train_test_split(
-                np.arange(len(records)),
-                test_size=test_size,
-                random_state=random_state,
-                stratify=np.asarray(labels, dtype=str),
-            )
-        except ValueError as exc:
-            raise ValueError(
-                f"Cannot create a valid stratified split: {exc}"
-            ) from exc
-
         y = np.asarray(labels, dtype=str)
+        if test_size is not None:
+            try:
+                train_indices, test_indices = train_test_split(
+                    indices,
+                    test_size=test_size,
+                    random_state=random_state,
+                    stratify=y,
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    f"Cannot create a valid stratified split: {exc}"
+                ) from exc
 
         X_train = X[train_indices]
         X_test = X[test_indices]
@@ -203,12 +207,13 @@ def auto_train(
 
         model.fit(X_train, y_train)
 
-        predictions = model.predict(X_test)
-
-        metrics = evaluate_classifier(
-            y_test.tolist(),
-            predictions.tolist(),
-        )
+        metrics = None
+        if len(test_indices):
+            predictions = model.predict(X_test)
+            metrics = evaluate_classifier(
+                y_test.tolist(),
+                predictions.tolist(),
+            )
 
         metadata = {
             "mode": "supervised",
@@ -255,11 +260,32 @@ def auto_train(
 
     model.fit(X_train)
 
-    predictions = model.predict(X_test)
-    anomaly_scores = model.decision_function(X_test)
-
-    anomaly_count = int(np.sum(predictions == -1))
-    normal_count = int(np.sum(predictions == 1))
+    if len(test_indices):
+        predictions = model.predict(X_test)
+        anomaly_scores = model.decision_function(X_test)
+        anomaly_count = int(np.sum(predictions == -1))
+        normal_count = int(np.sum(predictions == 1))
+        evaluation = {
+            "anomaly_count": anomaly_count,
+            "normal_count": normal_count,
+            "anomaly_rate": round(
+                anomaly_count / len(test_indices), 4
+            ),
+            "mean_anomaly_score": round(
+                float(np.mean(anomaly_scores)), 4
+            ),
+            "note": (
+                "No ground-truth labels were supplied. "
+                "These are anomaly flags, not confirmed attacks."
+            ),
+        }
+    else:
+        evaluation = {
+            "note": (
+                "All supplied training records were used. "
+                "Evaluate against a separate labeled test split."
+            ),
+        }
 
     metadata = {
         "mode": "unsupervised",
@@ -273,20 +299,7 @@ def auto_train(
         "random_state": random_state,
         "cpu_threads": cpu_threads,
         "created_at": created_at,
-        "evaluation": {
-            "anomaly_count": anomaly_count,
-            "normal_count": normal_count,
-            "anomaly_rate": round(
-                anomaly_count / len(test_indices), 4
-            ),
-            "mean_anomaly_score": round(
-                float(np.mean(anomaly_scores)), 4
-            ),
-            "note": (
-                "No ground-truth labels were supplied. "
-                "These are anomaly flags, not confirmed attacks."
-            ),
-        },
+        "evaluation": evaluation,
     }
 
     saved = _save_model(

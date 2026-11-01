@@ -8,6 +8,62 @@ from sklearn.metrics import (
     classification_report,
 )
 
+NORMAL_BINARY_LABELS = {"0", "normal", "benign", "legitimate", "safe"}
+ATTACK_BINARY_LABELS = {
+    "1",
+    "attack",
+    "malicious",
+    "intrusion",
+    "intrusion_attempt",
+    "anomaly",
+    "threat",
+    "suspicious",
+    "unauthorized",
+}
+
+
+def normalize_binary_label(value):
+    normalized = str(value).strip().lower().replace("-", "_").replace(" ", "_")
+    if normalized in NORMAL_BINARY_LABELS:
+        return "normal"
+    if normalized in ATTACK_BINARY_LABELS:
+        return "attack"
+    return None
+
+
+def binary_detection_metrics(counts):
+    true_positive = counts["true_positive"]
+    false_positive = counts["false_positive"]
+    true_negative = counts["true_negative"]
+    false_negative = counts["false_negative"]
+    total = true_positive + false_positive + true_negative + false_negative
+
+    return {
+        "records_evaluated": total,
+        "accuracy": round(
+            (true_positive + true_negative) / total,
+            4,
+        ) if total else 0.0,
+        "precision_attack": round(
+            true_positive / (true_positive + false_positive),
+            4,
+        ) if true_positive + false_positive else 0.0,
+        "recall_attack": round(
+            true_positive / (true_positive + false_negative),
+            4,
+        ) if true_positive + false_negative else 0.0,
+        "f1_attack": round(
+            2 * true_positive / (2 * true_positive + false_positive + false_negative),
+            4,
+        ) if 2 * true_positive + false_positive + false_negative else 0.0,
+        "confusion_matrix": {
+            "true_positive": true_positive,
+            "false_positive": false_positive,
+            "true_negative": true_negative,
+            "false_negative": false_negative,
+        },
+    }
+
 
 def evaluate_classifier(y_true, y_pred):
     """

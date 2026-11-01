@@ -101,6 +101,7 @@ class TaskWorker(QThread):
             elif self.task == "train":
                 from src.reader.streaming import StreamingReader
                 from src.training.auto_trainer import auto_train
+                from src.training.dataset import select_training_records
                 from src.training.manual_trainer import manual_train
                 from src.registry.model_registry import ModelRegistry
 
@@ -110,18 +111,22 @@ class TaskWorker(QThread):
                     strict=True,
                     progress_callback=self.progress.emit,
                 )
-                records = [
-                    record
-                    for batch in reader.iter_batches(self.path)
-                    for record in batch
-                ]
+                records, uses_official_split = select_training_records(
+                    reader.iter_batches(self.path)
+                )
                 if len(records) < 10:
                     raise ValueError(
-                        "Training requires at least 10 audit records."
+                        "Training requires at least 10 records in the selected "
+                        "training split."
                     )
 
                 training_mode = self.payload["training_mode"]
                 model_mode = self.payload["model_mode"]
+                if uses_official_split and model_mode != "unsupervised":
+                    raise ValueError(
+                        "This dataset's official training split contains only "
+                        "benign samples. Choose Unsupervised / anomaly training."
+                    )
                 label_column = self.payload["label_column"] or None
                 output_dir = (
                     APP_ROOT
@@ -140,6 +145,7 @@ class TaskWorker(QThread):
                         records,
                         label_column=label_column,
                         output_dir=output_dir,
+                        test_size=None if uses_official_split else 0.2,
                     )
                 else:
                     result = manual_train(
@@ -148,6 +154,7 @@ class TaskWorker(QThread):
                         label_column=label_column,
                         n_estimators=self.payload["n_estimators"],
                         output_dir=output_dir,
+                        test_size=None if uses_official_split else 0.2,
                     )
 
                 registry = ModelRegistry(project_root=APP_ROOT)
@@ -156,42 +163,172 @@ class TaskWorker(QThread):
                     name=f"{training_mode.title()} {result['algorithm']}",
                 )
                 result["records_loaded"] = len(records)
+                if uses_official_split:
+                    result["dataset_split_used"] = "train"
                 self.succeeded.emit(result)
 
             elif self.task == "detect":
-                from src.reader.streaming import StreamingReader
-                from src.registry.model_registry import ModelRegistry
-                from src.detection.engine import DetectionEngine
                 from src.detection.alert_manager import AlertManager
+                from src.detection.engine import DetectionEngine
                 from src.agents import DetectionAgent
+                from src.reader.streaming import StreamingReader
+                from src.training.dataset import (
+                    select_dataset_records,
+                )
+                from src.training.evaluator import (
+                    binary_detection_metrics,
+                    normalize_binary_label,
+                )
+                from src.registry.model_registry import ModelRegistry
 
                 session_root = Path(self.payload["session_root"])
                 self.status.emit("Reading audit records...")
                 reader = StreamingReader(batch_size=5000, strict=True)
-                records = [
-                    record
-                    for batch in reader.iter_batches(self.path)
-                    for record in batch
-                ]
-                if not records:
-                    raise ValueError(
-                        "The selected file contains no usable audit records."
-                    )
-
                 registry = ModelRegistry(project_root=APP_ROOT)
-                self.status.emit(
-                    f"Analyzing {len(records)} records..."
-                )
                 agent = DetectionAgent(
                     detector=DetectionEngine(registry),
                     alert_manager=AlertManager(
                         storage_path=session_root / "logs" / "alerts.jsonl"
                     ),
                 )
-                self.succeeded.emit(agent.run(
-                    records,
-                    mode=self.payload.get("mode") or None,
-                ))
+                batch_size = 1000
+                results = []
+                records_analyzed = 0
+                alerts_created = 0
+                benchmark_records = 0
+                confusion_counts = {
+                    "true_positive": 0,
+                    "false_positive": 0,
+                    "true_negative": 0,
+                    "false_negative": 0,
+                }
+                model_details = None
+                uses_official_split = False
+                requested_mode = self.payload.get("mode") or None
+
+                for source_batch in reader.iter_batches(self.path):
+                    records, batch_uses_official_split = (
+                        select_dataset_records(source_batch, "test")
+                    )
+                    uses_official_split = (
+                        uses_official_split or batch_uses_official_split
+                    )
+
+                    if (
+                        uses_official_split
+                        and requested_mode is None
+                        and registry.get_active_model("unsupervised")
+                    ):
+                        requested_mode = "unsupervised"
+
+                    for start in range(0, len(records), batch_size):
+                        record_batch = records[start:start + batch_size]
+                        if not record_batch:
+                            continue
+
+                        self.status.emit(
+                            f"Analyzing {records_analyzed + len(record_batch):,} "
+                            "selected records..."
+                        )
+                        batch_result = agent.run(
+                            record_batch,
+                            mode=requested_mode,
+                        )
+                        detection = batch_result["detection"]
+                        if model_details is None:
+                            model_details = {
+                                key: detection[key]
+                                for key in (
+                                    "model_id",
+                                    "model_name",
+                                    "algorithm",
+                                    "mode",
+                                )
+                            }
+
+                        if uses_official_split:
+                            for record, prediction in zip(
+                                record_batch,
+                                detection["results"],
+                            ):
+                                actual = normalize_binary_label(
+                                    record.get("label")
+                                )
+                                if actual is None:
+                                    continue
+                                if prediction["mode"] == "unsupervised":
+                                    predicted = (
+                                        "attack"
+                                        if prediction["verdict"] == "ANOMALY"
+                                        else "normal"
+                                    )
+                                else:
+                                    predicted = normalize_binary_label(
+                                        prediction.get("predicted_label")
+                                    )
+                                if predicted is None:
+                                    continue
+
+                                benchmark_records += 1
+                                if actual == "attack" and predicted == "attack":
+                                    confusion_counts["true_positive"] += 1
+                                elif actual == "attack":
+                                    confusion_counts["false_negative"] += 1
+                                elif predicted == "attack":
+                                    confusion_counts["false_positive"] += 1
+                                else:
+                                    confusion_counts["true_negative"] += 1
+
+                        if len(results) < 5000:
+                            remaining = 5000 - len(results)
+                            results.extend(
+                                {
+                                    **item,
+                                    "record_index": (
+                                        item["record_index"] + records_analyzed
+                                    ),
+                                }
+                                for item in detection["results"][:remaining]
+                            )
+
+                        records_analyzed += detection["records_analyzed"]
+                        alerts_created += batch_result["alerts"][
+                            "alerts_created"
+                        ]
+
+                if not records_analyzed:
+                    split_description = (
+                        " The dataset has no rows marked split=test."
+                        if uses_official_split
+                        else ""
+                    )
+                    raise ValueError(
+                        "The selected file contains no usable records to "
+                        f"analyze.{split_description}"
+                    )
+
+                detection_result = {
+                    "status": "COMPLETED",
+                    **(model_details or {}),
+                    "records_analyzed": records_analyzed,
+                    "alerts": alerts_created,
+                    "normal_or_reviewed": records_analyzed - alerts_created,
+                    "results": results,
+                    "results_truncated": records_analyzed > len(results),
+                }
+                result = {
+                    "detection": detection_result,
+                    "alerts": {"alerts_created": alerts_created},
+                }
+                if uses_official_split:
+                    result["dataset_split_used"] = "test"
+                    result["benchmark_evaluation"] = (
+                        binary_detection_metrics(confusion_counts)
+                    )
+                    result["benchmark_evaluation"]["records_with_labels"] = (
+                        benchmark_records
+                    )
+                self.succeeded.emit(result)
 
             elif self.task == "plan_prevention":
                 from src.reader.streaming import StreamingReader
@@ -1084,6 +1221,20 @@ class DetectionPage(DataPage):
             f"Analyzed {detection['records_analyzed']} records; "
             f"generated {result['alerts']['alerts_created']} alerts."
         )
+        if result.get("dataset_split_used") == "test":
+            metrics = result.get("benchmark_evaluation", {})
+            self.status_label.setText(
+                f"Evaluated official test split: "
+                f"{metrics.get('records_with_labels', 0):,} labeled records; "
+                f"{result['alerts']['alerts_created']:,} alerts; "
+                f"accuracy {metrics.get('accuracy', 0):.1%}, "
+                f"attack recall {metrics.get('recall_attack', 0):.1%}."
+            )
+        if detection.get("results_truncated"):
+            self.status_label.setText(
+                self.status_label.text()
+                + " Table shows the first 5,000 results; full totals are in Details."
+            )
         self.show_json(result)
         self.main_window.refresh_alerts()
         self.main_window.refresh_dashboard()

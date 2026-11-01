@@ -47,7 +47,7 @@ def manual_train(
     if mode not in {"supervised", "unsupervised"}:
         raise ValueError("mode must be supervised or unsupervised")
 
-    if not 0.1 <= test_size <= 0.4:
+    if test_size is not None and not 0.1 <= test_size <= 0.4:
         raise ValueError("test_size must be between 0.1 and 0.4")
 
     if cpu_threads < 1:
@@ -99,17 +99,21 @@ def manual_train(
         if np.min(counts) < 2:
             raise ValueError("Every class needs at least 2 records")
 
-        try:
-            train_indices, test_indices = train_test_split(
-                indices,
-                test_size=test_size,
-                random_state=random_state,
-                stratify=y,
-            )
-        except ValueError as exc:
-            raise ValueError(
-                f"Unable to create stratified train/test split: {exc}"
-            ) from exc
+        if test_size is None:
+            train_indices = indices
+            test_indices = np.asarray([], dtype=int)
+        else:
+            try:
+                train_indices, test_indices = train_test_split(
+                    indices,
+                    test_size=test_size,
+                    random_state=random_state,
+                    stratify=y,
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    f"Unable to create stratified train/test split: {exc}"
+                ) from exc
 
         model = RandomForestClassifier(
             n_estimators=n_estimators,
@@ -121,12 +125,13 @@ def manual_train(
 
         model.fit(X[train_indices], y[train_indices])
 
-        predictions = model.predict(X[test_indices])
-
-        metrics = evaluate_classifier(
-            y[test_indices].tolist(),
-            predictions.tolist(),
-        )
+        metrics = None
+        if len(test_indices):
+            predictions = model.predict(X[test_indices])
+            metrics = evaluate_classifier(
+                y[test_indices].tolist(),
+                predictions.tolist(),
+            )
 
         metadata = {
             "training_mode": "manual",
@@ -177,34 +182,44 @@ def manual_train(
         n_jobs=cpu_threads,
     )
 
-    train_indices, test_indices = train_test_split(
-        indices,
-        test_size=test_size,
-        random_state=random_state,
-    )
+    if test_size is None:
+        train_indices = indices
+        test_indices = np.asarray([], dtype=int)
+    else:
+        train_indices, test_indices = train_test_split(
+            indices,
+            test_size=test_size,
+            random_state=random_state,
+        )
 
     model.fit(X[train_indices])
 
-    predictions = model.predict(X[test_indices])
-    scores = model.decision_function(X[test_indices])
-
-    anomaly_count = int(np.sum(predictions == -1))
-    normal_count = int(np.sum(predictions == 1))
-
-    evaluation = {
-        "anomaly_count": anomaly_count,
-        "normal_count": normal_count,
-        "anomaly_rate": round(
-            anomaly_count / len(test_indices), 4
-        ),
-        "mean_anomaly_score": round(
-            float(np.mean(scores)), 4
-        ),
-        "note": (
-            "No ground-truth labels were used. "
-            "Anomaly flags are not confirmed attacks."
-        ),
-    }
+    if len(test_indices):
+        predictions = model.predict(X[test_indices])
+        scores = model.decision_function(X[test_indices])
+        anomaly_count = int(np.sum(predictions == -1))
+        normal_count = int(np.sum(predictions == 1))
+        evaluation = {
+            "anomaly_count": anomaly_count,
+            "normal_count": normal_count,
+            "anomaly_rate": round(
+                anomaly_count / len(test_indices), 4
+            ),
+            "mean_anomaly_score": round(
+                float(np.mean(scores)), 4
+            ),
+            "note": (
+                "No ground-truth labels were used. "
+                "Anomaly flags are not confirmed attacks."
+            ),
+        }
+    else:
+        evaluation = {
+            "note": (
+                "All supplied training records were used. "
+                "Evaluate against a separate labeled test split."
+            ),
+        }
 
     metadata = {
         "training_mode": "manual",
