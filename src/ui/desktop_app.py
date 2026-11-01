@@ -56,6 +56,7 @@ class TaskWorker(QThread):
     succeeded = Signal(object)
     failed = Signal(str)
     status = Signal(str)
+    progress = Signal(int)
 
     def __init__(
         self,
@@ -104,7 +105,11 @@ class TaskWorker(QThread):
                 from src.registry.model_registry import ModelRegistry
 
                 self.status.emit("Reading training records...")
-                reader = StreamingReader(batch_size=5000, strict=True)
+                reader = StreamingReader(
+                    batch_size=5000,
+                    strict=True,
+                    progress_callback=self.progress.emit,
+                )
                 records = [
                     record
                     for batch in reader.iter_batches(self.path)
@@ -746,9 +751,59 @@ class DataPage(QWidget):
         return item.text() if item is not None else None
 
     def show_json(self, result: object) -> None:
-        self.output.setPlainText(
-            json.dumps(result, indent=2, ensure_ascii=False, default=str)
+        details = json.dumps(
+            result,
+            indent=2,
+            ensure_ascii=False,
+            default=str,
         )
+        summary = self._result_summary(result)
+        if summary:
+            self.output.setPlainText(
+                "RESULT SUMMARY\n"
+                + "\n".join(summary)
+                + "\n\nFULL DETAILS\n"
+                + details
+            )
+        else:
+            self.output.setPlainText(details)
+
+    @staticmethod
+    def _result_summary(result: object) -> list[str]:
+        if isinstance(result, list):
+            return [f"Items: {len(result)}"]
+        if not isinstance(result, dict):
+            return [f"Result: {result}"] if result is not None else []
+
+        summary = []
+
+        def append_entries(entries, prefix="", depth=0):
+            for key, value in entries:
+                label = str(key).replace("_", " ").capitalize()
+                label = f"{prefix}{label}"
+
+                if isinstance(value, dict) and depth < 2:
+                    append_entries(value.items(), f"{label} / ", depth + 1)
+                elif isinstance(value, dict):
+                    summary.append(f"{label}: {len(value)} fields")
+                elif isinstance(value, list):
+                    summary.append(f"{label}: {len(value)} items")
+                elif value is None:
+                    summary.append(f"{label}: -")
+                else:
+                    text = str(value).replace("\r", " ").replace("\n", " ")
+                    if len(text) > 180:
+                        text = f"{text[:177]}..."
+                    summary.append(f"{label}: {text}")
+
+                if len(summary) >= 10:
+                    return
+
+        append_entries(result.items())
+        if len(summary) == 10:
+            summary.append("Additional fields are available in full details.")
+
+        return summary
 
     def report_error(self, message: str) -> None:
         self.status_label.setText("Operation failed.")
@@ -762,9 +817,16 @@ class ModelTrainingPage(DataPage):
             "ML Training",
             "Train an audit-log classifier or anomaly detector. Training reads "
             "the selected dataset into memory; use a dataset sized for this machine.",
-            ["Training result"],
+            ["Training result", "Details"],
             parent,
         )
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("Loading dataset: %p%")
+        self.progress_bar.setVisible(False)
+        self.layout().insertWidget(3, self.progress_bar)
+
         self.file_path = QLineEdit()
         self.file_path.setPlaceholderText("Select CSV, TSV, JSONL or Parquet")
         choose_button = QPushButton("Choose dataset")
@@ -833,6 +895,23 @@ class ModelTrainingPage(DataPage):
         )
 
     def on_trained(self, result: dict) -> None:
+        metadata = result.get("metadata", {})
+        summary_rows = [
+            ["Status", result.get("status", "UNKNOWN")],
+            ["Algorithm", result.get("algorithm", "-")],
+            ["Mode", result.get("mode", "-")],
+            ["Records loaded", result.get("records_loaded", "-")],
+            ["Training records", metadata.get("training_records", "-")],
+            ["Testing records", metadata.get("testing_records", "-")],
+        ]
+        evaluation = result.get("metrics") or result.get("evaluation")
+        if evaluation:
+            summary_rows.append([
+                "Evaluation",
+                json.dumps(evaluation, ensure_ascii=False),
+            ])
+        summary_rows.append(["Model file", result.get("model_path", "-")])
+        self.set_rows(summary_rows)
         self.status_label.setText(
             f"Trained and registered {result['algorithm']} "
             f"({result['records_loaded']} records)."
@@ -2063,6 +2142,13 @@ class DBIDSDesktopApp(QMainWindow):
             page.status_label.setText(f"{task.title()} started.")
             worker.status.connect(page.status_label.setText)
             worker.failed.connect(page.report_error)
+            if task == "train":
+                page.progress_bar.setValue(0)
+                page.progress_bar.setVisible(True)
+                worker.progress.connect(page.progress_bar.setValue)
+                worker.finished.connect(
+                    lambda: page.progress_bar.setVisible(False)
+                )
         else:
             worker.failed.connect(
                 lambda message: QMessageBox.critical(

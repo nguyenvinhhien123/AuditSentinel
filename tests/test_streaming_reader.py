@@ -45,6 +45,28 @@ class TestStreamingReader(unittest.TestCase):
         self.assertEqual(reader.stats["total_batches"], 2)
         self.assertEqual(reader.stats["status"], "COMPLETED")
 
+    def test_csv_reports_progress_percentages(self):
+        path = self.base / "progress.csv"
+        path.write_text(
+            "username,query\n"
+            "admin,SELECT 1\n"
+            "user,SELECT 2\n"
+            "guest,SELECT 3\n",
+            encoding="utf-8",
+        )
+        progress = []
+        reader = StreamingReader(
+            batch_size=1,
+            progress_callback=progress.append,
+        )
+
+        list(reader.iter_batches(path))
+
+        self.assertEqual(progress[0], 0)
+        self.assertEqual(progress[-1], 100)
+        self.assertEqual(progress, sorted(progress))
+        self.assertTrue(all(0 <= value <= 100 for value in progress))
+
     # TEST 2: TSV batch reading
     def test_tsv_batches(self):
         path = self.base / "sample.tsv"
