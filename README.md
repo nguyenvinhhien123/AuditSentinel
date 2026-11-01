@@ -40,6 +40,9 @@ python -m pip install -r requirements.txt
 python run.py
 ```
 
+Large local logs are loaded on demand rather than during startup. The dashboard's
+**Refresh** button recalculates its counts in the background.
+
 To use the Investigation Agent, install Ollama, start its local service, and download the configured model:
 
 ```powershell

@@ -1,6 +1,7 @@
 
 from pathlib import Path
 from datetime import datetime, timezone
+import heapq
 import json
 import uuid
 
@@ -104,9 +105,7 @@ class AlertManager:
 
         return context
 
-    def _read_alerts(self):
-        alerts = []
-
+    def _iter_alerts(self):
         try:
             with self.storage_path.open(
                 "r",
@@ -128,14 +127,15 @@ class AlertManager:
                             f"Invalid alert record on line {line_number}"
                         )
 
-                    alerts.append(alert)
+                    yield alert
 
         except OSError as exc:
             raise RuntimeError(
                 f"Cannot read alert storage: {exc}"
             ) from exc
 
-        return alerts
+    def _read_alerts(self):
+        return list(self._iter_alerts())
 
     def _write_alerts(self, alerts):
         temporary_path = self.storage_path.with_suffix(".tmp")
@@ -288,26 +288,22 @@ class AlertManager:
             if status not in self.VALID_STATUSES:
                 raise ValueError("Invalid status filter")
 
-        alerts = self._read_alerts()
+        latest = []
+        for index, alert in enumerate(self._iter_alerts()):
+            if severity and alert.get("severity") != severity:
+                continue
+            if status and alert.get("status") != status:
+                continue
 
-        if severity:
-            alerts = [
-                item for item in alerts
-                if item.get("severity") == severity
-            ]
+            created_at = alert.get("created_at", "")
+            entry = (created_at, -index, alert)
+            if len(latest) < limit:
+                heapq.heappush(latest, entry)
+            elif entry[:2] > latest[0][:2]:
+                heapq.heapreplace(latest, entry)
 
-        if status:
-            alerts = [
-                item for item in alerts
-                if item.get("status") == status
-            ]
-
-        alerts.sort(
-            key=lambda item: item.get("created_at", ""),
-            reverse=True,
-        )
-
-        return alerts[:limit]
+        latest.sort(key=lambda entry: entry[:2], reverse=True)
+        return [entry[2] for entry in latest]
 
     def update_status(
         self,
@@ -368,8 +364,6 @@ class AlertManager:
     def get_statistics(self):
         """Return counts grouped by severity and status."""
 
-        alerts = self._read_alerts()
-
         severity_counts = {
             severity: 0
             for severity in self.VALID_SEVERITIES
@@ -379,8 +373,10 @@ class AlertManager:
             status: 0
             for status in self.VALID_STATUSES
         }
+        total_alerts = 0
 
-        for alert in alerts:
+        for alert in self._iter_alerts():
+            total_alerts += 1
             severity = alert.get("severity")
             status = alert.get("status")
 
@@ -391,7 +387,7 @@ class AlertManager:
                 status_counts[status] += 1
 
         return {
-            "total_alerts": len(alerts),
+            "total_alerts": total_alerts,
             "severity_counts": severity_counts,
             "status_counts": status_counts,
             "open_alerts": (

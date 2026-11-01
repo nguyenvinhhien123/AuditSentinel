@@ -183,7 +183,13 @@ class TaskWorker(QThread):
 
                 session_root = Path(self.payload["session_root"])
                 self.status.emit("Reading audit records...")
-                reader = StreamingReader(batch_size=5000, strict=True)
+                reader = StreamingReader(
+                    batch_size=5000,
+                    strict=True,
+                    progress_callback=lambda value: self.progress.emit(
+                        min(value, 99)
+                    ),
+                )
                 registry = ModelRegistry(project_root=APP_ROOT)
                 agent = DetectionAgent(
                     detector=DetectionEngine(registry),
@@ -287,8 +293,12 @@ class TaskWorker(QThread):
                                     "record_index": (
                                         item["record_index"] + records_analyzed
                                     ),
+                                    "event": record,
                                 }
-                                for item in detection["results"][:remaining]
+                                for item, record in zip(
+                                    detection["results"][:remaining],
+                                    record_batch[:remaining],
+                                )
                             )
 
                         records_analyzed += detection["records_analyzed"]
@@ -328,6 +338,7 @@ class TaskWorker(QThread):
                     result["benchmark_evaluation"]["records_with_labels"] = (
                         benchmark_records
                     )
+                self.progress.emit(100)
                 self.succeeded.emit(result)
 
             elif self.task == "plan_prevention":
@@ -478,6 +489,55 @@ class TaskWorker(QThread):
                     response_engine=engine,
                 )
                 self.succeeded.emit(agent.run(self.payload["alert_id"]))
+
+            elif self.task == "load_alerts":
+                from src.detection.alert_manager import AlertManager
+
+                session_root = Path(self.payload["session_root"])
+                self.status.emit("Loading alerts...")
+                alerts = AlertManager(
+                    storage_path=session_root / "logs" / "alerts.jsonl"
+                ).list_alerts(
+                    status=self.payload.get("status") or None,
+                    limit=500,
+                )
+                self.succeeded.emit(alerts)
+
+            elif self.task == "load_dashboard":
+                from src.detection.alert_manager import AlertManager
+                from src.registry.model_registry import ModelRegistry
+
+                self.status.emit("Loading dashboard metrics...")
+                raw_dir = APP_ROOT / "dataset" / "raw"
+                processed_dir = APP_ROOT / "dataset" / "processed"
+                raw_files = (
+                    sum(1 for path in raw_dir.rglob("*") if path.is_file())
+                    if raw_dir.exists()
+                    else 0
+                )
+                processed_files = (
+                    sum(
+                        1
+                        for path in processed_dir.rglob("*.parquet")
+                        if path.is_file()
+                    )
+                    if processed_dir.exists()
+                    else 0
+                )
+                session_root = Path(self.payload["session_root"])
+                alert_stats = AlertManager(
+                    storage_path=session_root / "logs" / "alerts.jsonl"
+                ).get_statistics()
+                models = ModelRegistry(project_root=APP_ROOT).list_models()
+                active_models = sum(
+                    model.get("status") == "active" for model in models
+                )
+                self.succeeded.emit({
+                    "raw_files": raw_files,
+                    "processed_files": processed_files,
+                    "alert_stats": alert_stats,
+                    "active_models": active_models,
+                })
 
             else:
                 raise ValueError(f"Unknown task: {self.task}")
@@ -871,14 +931,29 @@ class DataPage(QWidget):
         self.output.setMinimumHeight(140)
         layout.addWidget(self.output, 2)
 
-    def set_rows(self, rows: list[list[object]]) -> None:
-        self.table.setRowCount(len(rows))
-        for row_index, values in enumerate(rows):
-            for column_index, value in enumerate(values):
-                item = QTableWidgetItem(str(value if value is not None else "-"))
-                item.setToolTip(item.text())
-                self.table.setItem(row_index, column_index, item)
-        self.table.resizeColumnsToContents()
+    def set_rows(
+        self,
+        rows: list[list[object]],
+        optimize: bool = False,
+    ) -> None:
+        if optimize:
+            self.table.setUpdatesEnabled(False)
+        try:
+            self.table.setRowCount(len(rows))
+            for row_index, values in enumerate(rows):
+                for column_index, value in enumerate(values):
+                    item = QTableWidgetItem(
+                        str(value if value is not None else "-")
+                    )
+                    if not optimize:
+                        item.setToolTip(item.text())
+                    self.table.setItem(row_index, column_index, item)
+            if not optimize:
+                self.table.resizeColumnsToContents()
+        finally:
+            if optimize:
+                self.table.setUpdatesEnabled(True)
+                self.table.viewport().update()
 
     def selected_value(self, column: int = 0) -> str | None:
         selected = self.table.selectionModel().selectedRows()
@@ -1078,7 +1153,6 @@ class ModelRegistryPage(DataPage):
         ):
             self.controls.addWidget(button)
             button.clicked.connect(callback)
-        self.refresh()
 
     def refresh(self) -> None:
         from src.registry.model_registry import ModelRegistry
@@ -1158,9 +1232,21 @@ class DetectionPage(DataPage):
             "Agent 1 uses the active supervised or unsupervised ML model to "
             "analyze audit logs and save suspicious/anomalous alerts. "
             "It does not block database activity.",
-            ["Record", "Mode", "Verdict", "Predicted label", "Confidence / score"],
+            ["Record", "Mode", "Classification", "Score"],
             parent,
         )
+        self.detection_results: list[dict] = []
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("Reading/analyzing dataset: %p%")
+        self.progress_bar.setVisible(False)
+        self.layout().insertWidget(4, self.progress_bar)
+        self.table.itemSelectionChanged.connect(self.show_selected_event)
+        self.output.setPlaceholderText(
+            "Select a detected event to inspect its details."
+        )
+
         self.file_path = QLineEdit()
         self.file_path.setPlaceholderText("Select an audit-log file")
         choose_button = QPushButton("Choose file")
@@ -1207,16 +1293,22 @@ class DetectionPage(DataPage):
 
     def on_detection(self, result: dict) -> None:
         detection = result["detection"]
-        self.set_rows([
+        self.detection_results = detection["results"]
+        self.output.clear()
+        self.set_rows(
             [
-                item.get("record_index"),
-                item.get("mode"),
-                item.get("verdict"),
-                item.get("predicted_label", "-"),
-                item.get("confidence", item.get("anomaly_score", "-")),
-            ]
-            for item in detection["results"]
-        ])
+                [
+                    item.get("record_index"),
+                    item.get("mode"),
+                    self._classification(item),
+                    self._format_score(
+                        item.get("confidence", item.get("anomaly_score"))
+                    ),
+                ]
+                for item in self.detection_results
+            ],
+            optimize=True,
+        )
         self.status_label.setText(
             f"Analyzed {detection['records_analyzed']} records; "
             f"generated {result['alerts']['alerts_created']} alerts."
@@ -1235,9 +1327,32 @@ class DetectionPage(DataPage):
                 self.status_label.text()
                 + " Table shows the first 5,000 results; full totals are in Details."
             )
-        self.show_json(result)
-        self.main_window.refresh_alerts()
-        self.main_window.refresh_dashboard()
+        self.main_window.alerts_need_refresh = True
+        self.main_window.dashboard_needs_refresh = True
+
+    @staticmethod
+    def _classification(result: dict) -> str:
+        if result.get("verdict") in {"ANOMALY", "SUSPICIOUS"}:
+            return "Anomaly"
+        if result.get("verdict") in {"NORMAL_PATTERN", "NORMAL"}:
+            return "Normal"
+        return "Review"
+
+    @staticmethod
+    def _format_score(value) -> str:
+        if isinstance(value, (int, float)):
+            return f"{value:.2f}"
+        return "-"
+
+    def show_selected_event(self) -> None:
+        selected = self.table.selectionModel().selectedRows()
+        if not selected:
+            self.output.clear()
+            return
+
+        row = selected[0].row()
+        if row < len(self.detection_results):
+            self.show_json(self.detection_results[row])
 
 
 class AlertsPage(DataPage):
@@ -1264,15 +1379,17 @@ class AlertsPage(DataPage):
         acknowledge.clicked.connect(self.acknowledge_selected)
         resolve.clicked.connect(self.resolve_selected)
         self.table.itemSelectionChanged.connect(self.show_selected)
-        self.refresh()
 
     def refresh(self) -> None:
-        from src.detection.alert_manager import AlertManager
+        self.main_window.run_background(
+            "load_alerts",
+            payload={"status": self.status_filter.currentData()},
+            on_success=self.on_alerts_loaded,
+            page=self,
+        )
 
-        status = self.status_filter.currentData()
-        self.alerts = AlertManager(
-            storage_path=self.main_window.session_path("logs", "alerts.jsonl")
-        ).list_alerts(status=status or None, limit=500)
+    def on_alerts_loaded(self, alerts: list[dict]) -> None:
+        self.alerts = alerts
         self.set_rows([
             [
                 alert.get("alert_id"),
@@ -1285,6 +1402,7 @@ class AlertsPage(DataPage):
             for alert in self.alerts
         ])
         self.status_label.setText(f"Alerts shown: {len(self.alerts)}")
+        self.main_window.alerts_need_refresh = False
 
     def show_selected(self) -> None:
         alert_id = self.selected_value()
@@ -1351,16 +1469,21 @@ class InvestigationPage(DataPage):
         investigate.clicked.connect(self.investigate_selected)
         refresh_reports.clicked.connect(self.refresh_reports)
         self.table.itemSelectionChanged.connect(self.show_selected_report)
-        self.refresh_alerts()
-        self.refresh_reports()
 
     def refresh_alerts(self) -> None:
-        from src.detection.alert_manager import AlertManager
-
         current = self.alert_select.currentData()
-        alerts = AlertManager(
-            storage_path=self.main_window.session_path("logs", "alerts.jsonl")
-        ).list_alerts(limit=500)
+        self.main_window.run_background(
+            "load_alerts",
+            payload={"status": ""},
+            on_success=lambda alerts: self.on_alerts_loaded(alerts, current),
+            page=self,
+        )
+
+    def on_alerts_loaded(
+        self,
+        alerts: list[dict],
+        current_alert_id: str | None,
+    ) -> None:
         self.alert_select.clear()
         for alert in alerts:
             label = (
@@ -1368,10 +1491,11 @@ class InvestigationPage(DataPage):
                 f"{alert.get('status')}"
             )
             self.alert_select.addItem(label, alert.get("alert_id"))
-        index = self.alert_select.findData(current)
+        index = self.alert_select.findData(current_alert_id)
         if index >= 0:
             self.alert_select.setCurrentIndex(index)
         self.status_label.setText(f"Available alerts: {len(alerts)}")
+        self.main_window.alerts_need_refresh = False
 
     def investigate_selected(self) -> None:
         alert_id = self.alert_select.currentData()
@@ -1466,7 +1590,6 @@ class ResponsePage(DataPage):
         reject.clicked.connect(self.reject_selected)
         simulate.clicked.connect(self.simulate_selected)
         self.table.itemSelectionChanged.connect(self.show_selected)
-        self.refresh()
 
     def engine(self):
         from src.response.engine import ResponseEngine
@@ -1860,7 +1983,6 @@ class SystemStatusPage(DataPage):
         refresh = QPushButton("Refresh")
         refresh.clicked.connect(self.refresh)
         self.controls.addWidget(refresh)
-        self.refresh()
 
     def refresh(self) -> None:
         checks = [
@@ -1952,29 +2074,35 @@ class DashboardPage(DataPage):
         refresh = QPushButton("Refresh")
         refresh.clicked.connect(self.refresh)
         self.controls.addWidget(refresh)
-        self.refresh()
+        self.status_label.setText(
+            "Click Refresh to load local metrics. Large log files are read on demand."
+        )
 
     def refresh(self) -> None:
-        from src.detection.alert_manager import AlertManager
-        from src.registry.model_registry import ModelRegistry
-
-        raw_dir = APP_ROOT / "dataset" / "raw"
-        processed_dir = APP_ROOT / "dataset" / "processed"
-        raw_files = sum(1 for path in raw_dir.rglob("*") if path.is_file()) if raw_dir.exists() else 0
-        processed_files = (
-            sum(1 for path in processed_dir.rglob("*.parquet") if path.is_file())
-            if processed_dir.exists()
-            else 0
+        self.main_window.run_background(
+            "load_dashboard",
+            on_success=self.on_dashboard_loaded,
+            page=self,
         )
-        alert_stats = AlertManager(
-            storage_path=self.main_window.session_path("logs", "alerts.jsonl")
-        ).get_statistics()
-        models = ModelRegistry(project_root=APP_ROOT).list_models()
-        active_models = sum(model.get("status") == "active" for model in models)
+
+    def on_dashboard_loaded(self, result: dict) -> None:
+        alert_stats = result["alert_stats"]
         self.set_rows([
-            ["Audit ingestion", "STREAM / NORMALIZE", f"{raw_files} raw files"],
-            ["Processed datasets", "PARQUET", f"{processed_files} files"],
-            ["ML detection", "SUPERVISED / ANOMALY", f"{active_models} active models"],
+            [
+                "Audit ingestion",
+                "STREAM / NORMALIZE",
+                f"{result['raw_files']} raw files",
+            ],
+            [
+                "Processed datasets",
+                "PARQUET",
+                f"{result['processed_files']} files",
+            ],
+            [
+                "ML detection",
+                "SUPERVISED / ANOMALY",
+                f"{result['active_models']} active models",
+            ],
             ["Alert monitoring", "LOCAL JSONL", f"{alert_stats['total_alerts']} total; {alert_stats['open_alerts']} open"],
             ["AI investigation", "LOCAL OLLAMA", "Uses configured local provider/model"],
             ["Response control", "SIMULATION ONLY", "Manual approval required"],
@@ -1982,6 +2110,7 @@ class DashboardPage(DataPage):
         self.status_label.setText(
             "Counts are read from local project storage; no placeholder metrics."
         )
+        self.main_window.dashboard_needs_refresh = False
 
 
 class DBIDSDesktopApp(QMainWindow):
@@ -1992,6 +2121,9 @@ class DBIDSDesktopApp(QMainWindow):
         self.resize(1180, 760)
         self.setMinimumSize(950, 650)
         self.workflow_worker: TaskWorker | None = None
+        self.alerts_need_refresh = False
+        self.dashboard_needs_refresh = False
+        self._loaded_pages = {"Dashboard"}
         from src.sessions import SessionManager
 
         self.session_manager = SessionManager(APP_ROOT)
@@ -2250,8 +2382,30 @@ class DBIDSDesktopApp(QMainWindow):
     def _navigation_handler(self, title: str):
         def navigate() -> None:
             self.show_page(title)
+            if title not in self._loaded_pages:
+                self._loaded_pages.add(title)
+                self._load_page(title)
+            elif title == "Alert Monitoring" and self.alerts_need_refresh:
+                self.refresh_alerts()
+            elif title == "Dashboard" and self.dashboard_needs_refresh:
+                self.refresh_dashboard()
 
         return navigate
+
+    def _load_page(self, title: str) -> None:
+        if title == "Model Registry":
+            self.registry_page.refresh()
+        elif title == "Alert Monitoring":
+            self.refresh_alerts()
+        elif title == "Prevention Simulation":
+            self.prevention_page.load_history()
+        elif title == "AI Investigation":
+            self.investigation_page.refresh_alerts()
+            self.investigation_page.refresh_reports()
+        elif title == "Response Management":
+            self.response_page.refresh()
+        elif title == "System Status":
+            self.system_page.refresh()
 
     def run_background(
         self,
@@ -2283,6 +2437,8 @@ class DBIDSDesktopApp(QMainWindow):
             "investigate",
             "propose_response",
             "generate_report",
+            "load_alerts",
+            "load_dashboard",
         }:
             payload = dict(payload or {})
             payload["session_root"] = str(self.current_session.root)
@@ -2293,7 +2449,7 @@ class DBIDSDesktopApp(QMainWindow):
             page.status_label.setText(f"{task.title()} started.")
             worker.status.connect(page.status_label.setText)
             worker.failed.connect(page.report_error)
-            if task == "train":
+            if task in {"train", "detect"}:
                 page.progress_bar.setValue(0)
                 page.progress_bar.setVisible(True)
                 worker.progress.connect(page.progress_bar.setValue)
@@ -2325,7 +2481,9 @@ class DBIDSDesktopApp(QMainWindow):
         self.alerts_page.refresh()
 
     def refresh_dashboard(self) -> None:
-        self.dashboard_page.refresh()
+        self.dashboard_needs_refresh = True
+        if self.workflow_worker is None or not self.workflow_worker.isRunning():
+            self.dashboard_page.refresh()
 
     def session_path(self, *parts: str) -> Path:
         return self.current_session.root.joinpath(*parts)
@@ -2458,13 +2616,15 @@ class DBIDSDesktopApp(QMainWindow):
         )
 
     def refresh_session_pages(self) -> None:
-        self.alerts_page.refresh()
-        self.investigation_page.refresh_alerts()
-        self.investigation_page.refresh_reports()
-        self.response_page.refresh()
-        self.prevention_page.load_history()
-        self.system_page.refresh()
-        self.dashboard_page.refresh()
+        self.alerts_need_refresh = True
+        self.dashboard_needs_refresh = True
+        self._loaded_pages = {"Dashboard"}
+        current_page = self.current_page_label.text()
+        if current_page != "Dashboard":
+            self._loaded_pages.add(current_page)
+            self._load_page(current_page)
+        else:
+            self.refresh_dashboard()
         self.reports_page.status_label.setText(
             f"Ready to export a report for: {self.current_session.name}"
         )
