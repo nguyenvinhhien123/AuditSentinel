@@ -128,6 +128,7 @@ For the Superviz25-SQL CSV, select the original `dataset.csv` directly. AuditSen
 2. Select the model and click **Verify selected** to check the stored model integrity.
 3. Click **Activate selected**. Activation verifies the model checksum and explicitly enables that model for its mode.
 4. Confirm the model mode (supervised or unsupervised) before running detection. Use **Deactivate selected mode** if you need to disable the active model for that mode.
+5. Use **Rename selected** to change the model's display name, or **Delete selected** to permanently remove it and its model files. Deleting an active model also deactivates it for that mode.
 
 ### Step 4 — detect suspicious records
 

@@ -548,17 +548,26 @@ class TaskWorker(QThread):
                 "verify_model",
                 "activate_model",
                 "deactivate_model",
+                "rename_model",
+                "delete_model",
             }:
                 from src.registry.model_registry import ModelRegistry
 
-                self.status.emit("Verifying model integrity...")
+                self.status.emit("Updating model registry...")
                 registry = ModelRegistry(project_root=APP_ROOT)
                 if self.task == "verify_model":
                     result = registry.verify_model(self.payload["model_id"])
                 elif self.task == "activate_model":
                     result = registry.activate_model(self.payload["model_id"])
-                else:
+                elif self.task == "deactivate_model":
                     result = registry.deactivate_model(self.payload["mode"])
+                elif self.task == "rename_model":
+                    result = registry.rename_model(
+                        self.payload["model_id"],
+                        self.payload["name"],
+                    )
+                else:
+                    result = registry.delete_model(self.payload["model_id"])
                 self.succeeded.emit(result)
 
             elif self.task == "load_reports":
@@ -1288,11 +1297,15 @@ class ModelRegistryPage(DataPage):
         verify_button = QPushButton("Verify selected")
         activate_button = QPushButton("Activate selected")
         deactivate_button = QPushButton("Deactivate selected mode")
+        rename_button = QPushButton("Rename selected")
+        delete_button = QPushButton("Delete selected")
         for button, callback in (
             (refresh_button, self.refresh),
             (verify_button, self.verify_selected),
             (activate_button, self.activate_selected),
             (deactivate_button, self.deactivate_selected),
+            (rename_button, self.rename_selected),
+            (delete_button, self.delete_selected),
         ):
             self.controls.addWidget(button)
             button.clicked.connect(callback)
@@ -1362,6 +1375,55 @@ class ModelRegistryPage(DataPage):
         self.main_window.run_background(
             "deactivate_model",
             payload={"mode": model["mode"]},
+            on_success=self.on_model_updated,
+            page=self,
+        )
+
+    def rename_selected(self) -> None:
+        model = self.selected_model()
+        if model is None:
+            self.report_error("Select a registered model first.")
+            return
+        name, accepted = QInputDialog.getText(
+            self,
+            "Rename model",
+            "Enter a new display name:",
+            QLineEdit.EchoMode.Normal,
+            model.get("name", ""),
+        )
+        if not accepted:
+            return
+        self.main_window.run_background(
+            "rename_model",
+            payload={"model_id": model["model_id"], "name": name},
+            on_success=self.on_model_updated,
+            page=self,
+        )
+
+    def delete_selected(self) -> None:
+        model = self.selected_model()
+        if model is None:
+            self.report_error("Select a registered model first.")
+            return
+        active_warning = (
+            f"\n\nThis model is active for {model['mode']} detection and "
+            "will be deactivated."
+            if model.get("status") == "active"
+            else ""
+        )
+        answer = QMessageBox.question(
+            self,
+            "Delete model",
+            f"Permanently delete '{model.get('name')}' and its model files?"
+            f"{active_warning}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self.main_window.run_background(
+            "delete_model",
+            payload={"model_id": model["model_id"]},
             on_success=self.on_model_updated,
             page=self,
         )

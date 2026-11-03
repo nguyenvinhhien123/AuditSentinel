@@ -57,7 +57,7 @@ If Ollama is already running as a background service, only run the `pull` comman
 1. Open **ML Training** and choose an audit dataset (`CSV`, `TSV`, `JSONL`, `NDJSON`, or `Parquet`).
 2. Choose **Unsupervised / anomaly** when records have no labels. Choose **Supervised / labeled** when every row has a label column such as `normal` or `attack`; enter that column's name.
 3. Click **Train and register**. Training requires at least 10 records.
-4. Open **Model Registry**, select the new model, and click **Activate selected**.
+4. Open **Model Registry**, select the new model, and click **Activate selected**. You can rename a model or delete it and its files from this page.
 5. Open **Detection & Alerts** (Agent 1), select an audit dataset and the matching model mode, then click **Run detection**.
 6. Open **AI Investigation** (Agent 2), select an alert, and click **Investigate**. This step requires Ollama.
 7. Open **Response Management** (Agent 3) and click **Propose from investigation**. Review actions; approval/simulation does not perform real containment.

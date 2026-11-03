@@ -228,6 +228,132 @@ class ModelRegistry:
 
         return models
 
+    @staticmethod
+    def _validate_model_name(name):
+        if not isinstance(name, str):
+            raise TypeError("Model name must be text")
+        normalized = name.strip()
+        if not normalized or len(normalized) > 120:
+            raise ValueError("Model name must contain 1-120 characters")
+        if any(ord(character) < 32 for character in normalized):
+            raise ValueError("Model name contains unsupported characters")
+        return normalized
+
+    def rename_model(self, model_id, name):
+        """Update a model's display name without changing its artifact."""
+
+        name = self._validate_model_name(name)
+        data = self._read_data()
+        model = next(
+            (
+                item
+                for item in data["models"]
+                if item["model_id"] == model_id
+            ),
+            None,
+        )
+        if model is None:
+            raise KeyError(f"Unknown model ID: {model_id}")
+
+        model["name"] = name
+        self._write_data(data)
+        return {
+            "status": "RENAMED",
+            "model_id": model_id,
+            "name": name,
+        }
+
+    def delete_model(self, model_id):
+        """Remove a model from the registry and delete its unshared files."""
+
+        data = self._read_data()
+        model = next(
+            (
+                item
+                for item in data["models"]
+                if item["model_id"] == model_id
+            ),
+            None,
+        )
+        if model is None:
+            raise KeyError(f"Unknown model ID: {model_id}")
+
+        model_paths = {
+            model.get("model_path"),
+            model.get("metadata_path"),
+        }
+        paths_to_delete = []
+        for stored_path in model_paths:
+            if not isinstance(stored_path, str) or not stored_path:
+                continue
+            path = Path(stored_path)
+            if not path.is_absolute():
+                path = self.project_root / path
+            if path.is_symlink():
+                raise ValueError("Model files cannot be symbolic links")
+            path = path.resolve()
+            if not self._is_inside_project(path):
+                raise ValueError(
+                    "Model files must be inside the project directory"
+                )
+            if path == self.registry_path:
+                raise ValueError("Model file path conflicts with the registry")
+            if path.exists() and not path.is_file():
+                raise ValueError("Model artifact path is not a file")
+
+            shared = any(
+                other.get(key)
+                and (self.project_root / other[key]).resolve() == path
+                for other in data["models"]
+                if other is not model
+                for key in ("model_path", "metadata_path")
+            )
+            if path.exists() and not shared:
+                paths_to_delete.append(path)
+
+        staged_files = []
+        try:
+            for path in paths_to_delete:
+                staged_path = path.with_name(
+                    f".{path.name}.deleting-{uuid.uuid4().hex}"
+                )
+                path.rename(staged_path)
+                staged_files.append((path, staged_path))
+
+            data["models"] = [
+                item for item in data["models"]
+                if item["model_id"] != model_id
+            ]
+            deactivated = model_id in data["active_models"].values()
+            data["active_models"] = {
+                mode: active_id
+                for mode, active_id in data["active_models"].items()
+                if active_id != model_id
+            }
+            self._write_data(data)
+        except (OSError, ValueError):
+            for original_path, staged_path in reversed(staged_files):
+                if staged_path.exists():
+                    staged_path.rename(original_path)
+            raise
+
+        try:
+            for _, staged_path in staged_files:
+                staged_path.unlink()
+        except OSError as exc:
+            raise RuntimeError(
+                "The model was removed from the registry, but a model file "
+                f"could not be deleted: {exc}"
+            ) from exc
+
+        return {
+            "status": "DELETED",
+            "model_id": model_id,
+            "name": model.get("name"),
+            "mode": model.get("mode"),
+            "deactivated": deactivated,
+        }
+
     def verify_model(self, model_id):
         """Verify that a registered model still matches its checksum."""
 
