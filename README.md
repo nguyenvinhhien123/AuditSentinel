@@ -67,7 +67,7 @@ The repository includes a synthetic labeled sample at `dataset/samples/auditsent
 
 ## Work sessions
 
-The session selector in the top bar lets you create a new work session or return to an existing one. Alerts, investigation reports, response actions, prevention simulation history, and selected dataset paths are isolated per session under `sessions/<session-id>/` or saved in the session index. The first entry, **Existing Data**, points to the original `logs/` and `reports/` folders so earlier records remain available. No history is deleted when switching or creating a session.
+The session selector in the top bar lets you create a new work session or return to an existing one. Use the trash button beside it to permanently delete the selected session and its data after confirmation; the **Existing Data** session is protected. Deleting the active session switches to **Existing Data** first. Alerts, investigation reports, response actions, prevention simulation history, and selected dataset paths are isolated per session under `sessions/<session-id>/` or saved in the session index. The first entry, **Existing Data**, points to the original `logs/` and `reports/` folders so earlier records remain available. Switching or creating a session does not delete history.
 
 The model registry and trained models remain shared across sessions; switching work sessions does not require retraining. The selected dataset files themselves remain wherever the user stored them.
 

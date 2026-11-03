@@ -2350,9 +2350,10 @@ class DBIDSDesktopApp(QMainWindow):
         self.last_detection_summary: dict | None = None
         self._refresh_after_workflow: set[str] = set()
         self._loaded_pages = {"Dashboard"}
-        from src.sessions import SessionManager
+        from src.sessions import LEGACY_SESSION_ID, SessionManager
 
         self.session_manager = SessionManager(APP_ROOT)
+        self.legacy_session_id = LEGACY_SESSION_ID
         self.current_session = self.session_manager.active_session()
 
         root = QWidget()
@@ -2437,6 +2438,9 @@ class DBIDSDesktopApp(QMainWindow):
         self.current_page_label.setObjectName("topbarTitle")
         self.session_selector = QComboBox()
         self.session_selector.setMinimumWidth(190)
+        self.delete_session_button = QPushButton("🗑")
+        self.delete_session_button.setAccessibleName("Delete session")
+        self.delete_session_button.setToolTip("Delete the selected session")
         self.new_session_button = QPushButton("New session")
         self.new_session_button.setObjectName("primaryButton")
         status_label = QLabel("● Local system")
@@ -2445,6 +2449,7 @@ class DBIDSDesktopApp(QMainWindow):
         topbar_layout.addStretch()
         topbar_layout.addWidget(QLabel("Session:"))
         topbar_layout.addWidget(self.session_selector)
+        topbar_layout.addWidget(self.delete_session_button)
         topbar_layout.addWidget(self.new_session_button)
         topbar_layout.addWidget(status_label)
         self.refresh_session_selector()
@@ -2452,6 +2457,9 @@ class DBIDSDesktopApp(QMainWindow):
             self._session_selection_changed
         )
         self.new_session_button.clicked.connect(self.create_session_dialog)
+        self.delete_session_button.clicked.connect(
+            self.delete_selected_session
+        )
 
         content_layout.addWidget(topbar)
         content_layout.addWidget(self.stack, 1)
@@ -2828,6 +2836,9 @@ class DBIDSDesktopApp(QMainWindow):
             raise RuntimeError("The active work session is missing from the list")
         self.session_selector.setCurrentIndex(selected_index)
         self.session_selector.blockSignals(False)
+        self.delete_session_button.setEnabled(
+            not self.current_session.is_legacy
+        )
 
     def _session_selection_changed(self, index: int) -> None:
         session_id = self.session_selector.itemData(index)
@@ -2904,6 +2915,67 @@ class DBIDSDesktopApp(QMainWindow):
             self,
             "New session created",
             "A new empty work session is active. Previous session data has not been deleted.",
+        )
+
+    def delete_selected_session(self) -> None:
+        if self._session_worker_is_running():
+            QMessageBox.information(
+                self,
+                "Task in progress",
+                "Wait for the current operation to finish before deleting a session.",
+            )
+            return
+
+        session_id = self.session_selector.currentData()
+        if not session_id:
+            return
+        try:
+            session = self.session_manager.get_session(session_id)
+        except (KeyError, ValueError, RuntimeError) as exc:
+            QMessageBox.critical(
+                self,
+                "AuditSentinel Session Error",
+                f"{type(exc).__name__}: {exc}",
+            )
+            return
+        if session.is_legacy:
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Delete session",
+            f"Permanently delete '{session.name}' and all of its session data?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            if session.session_id == self.current_session.session_id:
+                self.save_current_session_state()
+                self.current_session = self.session_manager.set_active_session(
+                    self.legacy_session_id
+                )
+                self.restore_session_state()
+                self.last_detection_summary = None
+                self.refresh_session_pages()
+            self.session_manager.delete_session(session.session_id)
+        except (KeyError, TypeError, ValueError, RuntimeError, OSError) as exc:
+            self.refresh_session_selector()
+            QMessageBox.critical(
+                self,
+                "AuditSentinel Session Error",
+                f"{type(exc).__name__}: {exc}",
+            )
+            return
+
+        self.refresh_session_selector()
+        self.refresh_session_pages()
+        QMessageBox.information(
+            self,
+            "Session deleted",
+            f"'{session.name}' and its session data were deleted.",
         )
 
     def refresh_session_pages(self) -> None:

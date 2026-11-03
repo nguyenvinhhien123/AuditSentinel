@@ -256,3 +256,46 @@ class SessionManager:
             created_at=created_at,
             is_legacy=False,
         )
+
+    def delete_session(self, session_id: str) -> None:
+        session_id = self._validate_session_id(session_id)
+        session = self.get_session(session_id)
+        if session.is_legacy:
+            raise ValueError("The existing-data session cannot be deleted")
+
+        data = self._read_index()
+        if data["active_session_id"] == session_id:
+            raise ValueError("The active session cannot be deleted")
+
+        session_path = self.sessions_root / session_id
+        sessions_root = self.sessions_root.resolve()
+        if session_path.is_symlink():
+            raise ValueError("Session storage cannot be a symbolic link")
+        resolved_path = session_path.resolve()
+        if resolved_path.parent != sessions_root:
+            raise ValueError("Session path is outside the sessions directory")
+
+        temporary_path = self.sessions_root / f".deleting-{uuid.uuid4().hex}"
+        moved_session = False
+        try:
+            if session_path.exists():
+                session_path.rename(temporary_path)
+                moved_session = True
+            data["sessions"] = [
+                item for item in data["sessions"]
+                if item.get("session_id") != session_id
+            ]
+            self._write_index(data)
+        except (OSError, RuntimeError):
+            if moved_session and temporary_path.exists():
+                temporary_path.rename(session_path)
+            raise
+
+        if moved_session:
+            try:
+                shutil.rmtree(temporary_path)
+            except OSError as exc:
+                raise RuntimeError(
+                    f"Session was removed from the list but its data "
+                    f"could not be fully deleted: {exc}"
+                ) from exc

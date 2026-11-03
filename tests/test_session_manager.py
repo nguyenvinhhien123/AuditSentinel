@@ -61,6 +61,37 @@ class SessionManagerTests(unittest.TestCase):
                 LEGACY_SESSION_ID,
             )
 
+    def test_delete_session_removes_its_data_and_index_entry(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            manager = SessionManager(temporary_directory)
+            session = manager.create_session("old incident")
+            manager.set_active_session(LEGACY_SESSION_ID)
+
+            (session.root / "logs" / "alerts.jsonl").write_text(
+                '{"alert_id":"old-alert"}\n',
+                encoding="utf-8",
+            )
+            manager.delete_session(session.session_id)
+
+            self.assertNotIn(session, manager.list_sessions())
+            self.assertFalse(session.root.exists())
+            self.assertEqual(
+                manager.active_session().session_id,
+                LEGACY_SESSION_ID,
+            )
+
+    def test_delete_session_rejects_legacy_and_active_sessions(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            manager = SessionManager(temporary_directory)
+            session = manager.create_session("current incident")
+
+            with self.assertRaises(ValueError):
+                manager.delete_session(LEGACY_SESSION_ID)
+            with self.assertRaises(ValueError):
+                manager.delete_session(session.session_id)
+
+            self.assertIn(session, manager.list_sessions())
+
     def test_invalid_session_names_and_ids_are_rejected(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             manager = SessionManager(temporary_directory)

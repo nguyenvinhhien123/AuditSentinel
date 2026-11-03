@@ -89,7 +89,7 @@ The application is configured to contact Ollama at `http://localhost:11434`. If 
 
 1. Launch the desktop app with `python run.py` from the project root.
 2. The main window has a left navigation menu and a session selector in the top bar.
-3. Use the existing session or choose **New session** to isolate a separate work run. Switch sessions from the selector when returning to prior work.
+3. Use the existing session or choose **New session** to isolate a separate work run. Switch sessions from the selector when returning to prior work. Use the trash button beside the selector to permanently delete the selected session after confirmation. **Existing Data** cannot be deleted; deleting the active session switches to **Existing Data** first.
 4. Alerts, investigation reports, response actions, prevention simulation history, and selected dataset paths are stored per session. The model registry and trained models are shared across sessions.
 
 The **Existing Data** session points to the original `logs/` and `reports/` folders. Creating or switching sessions does not delete history. Dataset files remain at their original locations.
