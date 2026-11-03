@@ -21,8 +21,8 @@ def main():
         storage_path=base_dir / "alerts.jsonl"
     )
 
-    # TEST 1: Create a critical alert.
-    print("\n[TEST 1] Create Critical Alert")
+    # TEST 1: Score an alert from detector and SQL operation evidence.
+    print("\n[TEST 1] Score Alert")
 
     critical_result = {
         "record_index": 0,
@@ -46,12 +46,12 @@ def main():
     )
 
     assert outcome["status"] == "CREATED"
-    assert outcome["alert"]["severity"] == "CRITICAL"
+    assert outcome["alert"]["severity"] == "MEDIUM"
     assert "password" not in outcome["alert"]["context"]
 
     critical_id = outcome["alert"]["alert_id"]
 
-    print("[PASS] Create Critical Alert")
+    print("[PASS] Score Alert")
 
     # TEST 2: Create a high alert.
     print("\n[TEST 2] Create High Alert")
@@ -71,7 +71,7 @@ def main():
     print("[PASS] Create High Alert")
 
     # TEST 3: Create an anomaly alert.
-    print("\n[TEST 3] Create Medium Alert")
+    print("\n[TEST 3] Create Anomaly Alert")
 
     anomaly_result = {
         "record_index": 2,
@@ -82,12 +82,12 @@ def main():
 
     anomaly = manager.create_alert(anomaly_result)
 
-    assert anomaly["alert"]["severity"] == "MEDIUM"
+    assert anomaly["alert"]["severity"] == "HIGH"
 
     print("[PASS] Create Medium Alert")
 
     # TEST 4: Create a review alert.
-    print("\n[TEST 4] Create Low Alert")
+    print("\n[TEST 4] Create Review Alert")
 
     review_result = {
         "record_index": 3,
@@ -98,9 +98,9 @@ def main():
 
     review = manager.create_alert(review_result)
 
-    assert review["alert"]["severity"] == "LOW"
+    assert review["alert"]["severity"] == "MEDIUM"
 
-    print("[PASS] Create Low Alert")
+    print("[PASS] Create Review Alert")
 
     # TEST 5: Ignore normal results.
     print("\n[TEST 5] Ignore Normal Results")

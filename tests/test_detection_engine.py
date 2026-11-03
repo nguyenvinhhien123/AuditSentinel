@@ -192,6 +192,14 @@ def main():
         "anomaly_score" in item
         for item in unsupervised_result["results"]
     )
+    assert all(
+        "risk_score" in item
+        and (
+            item["risk_score"] is None
+            or 0 <= item["risk_score"] <= 100
+        )
+        for item in unsupervised_result["results"]
+    )
 
     print("[PASS] Unsupervised Detection")
 

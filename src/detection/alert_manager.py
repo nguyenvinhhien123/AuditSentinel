@@ -6,6 +6,8 @@ import json
 import tempfile
 import uuid
 
+from src.risk_scoring import calculate_risk_score, severity_from_risk_score
+
 
 class AlertManager:
     """
@@ -43,23 +45,36 @@ class AlertManager:
         return datetime.now(timezone.utc).isoformat()
 
     @staticmethod
-    def _classify_severity(result):
-        mode = result.get("mode")
+    def _classify_severity(result, context=None):
         verdict = result.get("verdict")
         confidence = result.get("confidence")
 
-        if verdict == "SUSPICIOUS":
-            if confidence is not None and confidence >= 0.90:
-                return "CRITICAL"
-            return "HIGH"
-
-        if verdict == "ANOMALY":
-            return "MEDIUM"
-
-        if verdict == "REVIEW":
-            return "LOW"
+        risk = calculate_risk_score(
+            confidence=confidence,
+            anomaly_score=result.get("anomaly_score"),
+            context=context,
+            verdict=verdict,
+        )
+        severity = severity_from_risk_score(risk["risk_score"])
+        if severity is not None:
+            return severity
 
         return None
+
+    @staticmethod
+    def _enrich_alert(alert):
+        enriched = dict(alert)
+        risk = calculate_risk_score(
+            confidence=enriched.get("confidence"),
+            anomaly_score=enriched.get("anomaly_score"),
+            context=enriched.get("context"),
+            verdict=enriched.get("verdict"),
+        )
+        enriched.update(risk)
+        severity = severity_from_risk_score(risk["risk_score"])
+        if severity is not None:
+            enriched["severity"] = severity
+        return enriched
 
     @staticmethod
     def _safe_context(record):
@@ -212,7 +227,8 @@ class AlertManager:
         if not isinstance(detection_result, dict):
             raise TypeError("detection_result must be a dictionary")
 
-        severity = self._classify_severity(detection_result)
+        context = self._safe_context(record)
+        severity = self._classify_severity(detection_result, context)
 
         if severity is None:
             return {
@@ -234,9 +250,15 @@ class AlertManager:
             "record_index": detection_result.get("record_index"),
             "model_id": model_id,
             "model_name": model_name,
-            "context": self._safe_context(record),
+            "context": context,
             "resolution": None,
         }
+        alert.update(calculate_risk_score(
+            confidence=alert["confidence"],
+            anomaly_score=alert["anomaly_score"],
+            context=alert["context"],
+            verdict=alert["verdict"],
+        ))
 
         with self.storage_path.open(
             "a",
@@ -344,7 +366,7 @@ class AlertManager:
                 heapq.heapreplace(latest, entry)
 
         latest.sort(key=lambda entry: entry[:2], reverse=True)
-        return [entry[2] for entry in latest]
+        return [self._enrich_alert(entry[2]) for entry in latest]
 
     def list_recent_alerts(
         self,
@@ -380,11 +402,14 @@ class AlertManager:
             if len(alerts) == limit:
                 break
 
-        return sorted(
-            alerts,
-            key=lambda alert: alert.get("created_at", ""),
-            reverse=True,
-        )
+        return [
+            self._enrich_alert(alert)
+            for alert in sorted(
+                alerts,
+                key=lambda alert: alert.get("created_at", ""),
+                reverse=True,
+            )
+        ]
 
     def get_alert(self, alert_id):
         """Find an alert by scanning backward from the newest stored record."""
@@ -395,7 +420,7 @@ class AlertManager:
         alert_id = alert_id.strip()
         for alert in self._iter_alerts_reverse():
             if alert.get("alert_id") == alert_id:
-                return alert
+                return self._enrich_alert(alert)
 
         return None
 

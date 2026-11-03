@@ -96,7 +96,8 @@ class TestPipelineIntegration(unittest.TestCase):
         # 1. Detection result -> Alert
         alert = self.create_test_alert()
 
-        self.assertEqual(alert["severity"], "CRITICAL")
+        self.assertEqual(alert["severity"], "MEDIUM")
+        self.assertEqual(alert["risk_score"], 37.5)
 
         # 2. Alert -> AI Investigation
         result = self.manager.process_alert(

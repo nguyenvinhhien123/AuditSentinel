@@ -1,10 +1,10 @@
 
 import json
-import math
 import re
 from datetime import datetime, timezone
 
 import requests
+from src.risk_scoring import calculate_risk_score
 
 
 class InvestigationEngine:
@@ -24,13 +24,6 @@ class InvestigationEngine:
         self.host = host.rstrip("/")
         self.model = model
         self.timeout = timeout
-
-    SEVERITY_IMPACT_WEIGHTS = {
-        "LOW": 0.2,
-        "MEDIUM": 0.5,
-        "HIGH": 0.8,
-        "CRITICAL": 1.0,
-    }
 
     @staticmethod
     def _safe_text(value, max_length=2000):
@@ -271,58 +264,12 @@ ALERT DATA:
 
     @classmethod
     def _calculate_risk_score(cls, alert):
-        confidence = alert.get("confidence")
-        severity = str(alert.get("severity") or "").upper()
-        impact_weight = cls.SEVERITY_IMPACT_WEIGHTS.get(severity)
-
-        valid_confidence = (
-            isinstance(confidence, (int, float))
-            and not isinstance(confidence, bool)
-            and math.isfinite(confidence)
-            and 0 <= confidence <= 1
+        return calculate_risk_score(
+            confidence=alert.get("confidence"),
+            anomaly_score=alert.get("anomaly_score"),
+            context=alert.get("context"),
+            verdict=alert.get("verdict"),
         )
-        if not valid_confidence or impact_weight is None:
-            return {
-                "risk_score": None,
-                "risk_score_band": "UNKNOWN",
-                "risk_score_formula": "100 × confidence × severity impact",
-                "risk_score_inputs": {
-                    "confidence": confidence,
-                    "severity": severity or None,
-                    "severity_impact_weight": impact_weight,
-                },
-                "risk_score_note": (
-                    "Not calculated: a numeric confidence from 0 to 1 "
-                    "and a recognized alert severity are required."
-                ),
-            }
-
-        score = round(100 * confidence * impact_weight, 1)
-        if score == 0:
-            band = "NONE"
-        elif score < 40:
-            band = "LOW"
-        elif score < 70:
-            band = "MEDIUM"
-        elif score < 90:
-            band = "HIGH"
-        else:
-            band = "CRITICAL"
-
-        return {
-            "risk_score": score,
-            "risk_score_band": band,
-            "risk_score_formula": "100 × confidence × severity impact",
-            "risk_score_inputs": {
-                "confidence": confidence,
-                "severity": severity,
-                "severity_impact_weight": impact_weight,
-            },
-            "risk_score_note": (
-                "Internal alert-priority estimate, not an official CVSS score. "
-                "Detector confidence may not be calibrated as a probability."
-            ),
-        }
 
     def check_connection(self):
         """Check whether the local Ollama API is reachable."""

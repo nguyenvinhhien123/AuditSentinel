@@ -153,13 +153,15 @@ Detection analyzes the selected offline file and stores alerts; it does not bloc
 2. Open **AI Investigation**, click **Refresh alerts**, and select the alert to investigate.
 3. Click **Investigate**. The application asks the configured local Ollama model to analyze the selected alert and saves an investigation report.
 
-The report includes an internal risk-priority estimate:
+The Detection results, Alert Monitoring, and investigation report include an internal likelihood-impact estimate based on the NIST SP 800-30 risk-assessment approach. NIST describes assessing likelihood and impact; the numeric mapping below is an application-defined implementation, not an official NIST scoring formula.
 
-`Risk score = 100 × detector confidence × severity impact weight`
+`Risk score = round(((Likelihood × Impact − 1) / 24) × 100, 1)`
 
-Severity impact weights are LOW = 0.2, MEDIUM = 0.5, HIGH = 0.8, and CRITICAL = 1.0. The score is rounded to one decimal place and categorized as NONE (0), LOW (above 0 and below 40), MEDIUM (40 to below 70), HIGH (70 to below 90), or CRITICAL (90 to 100). For example, a HIGH alert with confidence 0.85 scores 68.0 (MEDIUM). The report records the inputs and formula. If confidence is missing or outside 0–1, or severity is unrecognized, the score is UNKNOWN rather than zero.
+Likelihood and Impact use ordinal ratings from 1 to 5. For supervised detector confidence, Likelihood is `min(floor(confidence × 5) + 1, 5)`. For unsupervised Isolation Forest scores, negative decision margins map to Likelihood 1–5 at absolute margin thresholds 0.01, 0.02, 0.03, and 0.04. A verdict-only fallback maps SUSPICIOUS to 4, ANOMALY to 3, and REVIEW to 2. These detector ratings are ordinal signals, not calibrated attack probabilities.
 
-This is an application-specific prioritization estimate, not an official CVSS score or a calibrated probability of a real-world attack. The LLM's qualitative `risk_level` remains a separate assessment.
+Impact is estimated from observed SQL operations: SELECT/SHOW/DESCRIBE/EXPLAIN = 2; INSERT/UPDATE/DELETE/MERGE/REPLACE = 4; DROP/TRUNCATE/ALTER/GRANT/REVOKE = 5. If no recognized operation is available, Impact defaults to 3 and the report marks it as estimated. The resulting score bands are LOW (0–<20), MEDIUM (20–<40), HIGH (40–<60), and CRITICAL (60–100); Alert Monitoring severity is derived from these same bands. For example, Likelihood 4 and Impact 2 gives `round(((4 × 2 − 1) / 24) × 100, 1) = 29.2` (MEDIUM).
+
+This is a transparent, local risk estimate, not a CVSS score or an official NIST numeric rating. The approach follows the likelihood-and-impact assessment described in [NIST SP 800-30 Rev. 1](https://csrc.nist.gov/pubs/sp/800/30/r1/final); the numeric formula and mappings above are AuditSentinel's own rubric. CVSS measures vulnerability severity and requires its own vector metrics, which these runtime alerts do not provide. Detector confidence and anomaly margins are not calibrated probabilities. The LLM's qualitative `risk_level` remains a separate assessment.
 4. Review the returned status and report. Click **Refresh reports** to list saved investigations; select a report to view its details.
 
 Investigation depends on Ollama. It does not execute SQL, scripts, or operating-system commands. Treat its narrative as analysis requiring human verification.

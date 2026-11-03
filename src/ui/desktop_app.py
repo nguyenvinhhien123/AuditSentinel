@@ -1531,8 +1531,10 @@ class DetectionPage(DataPage):
                     item.get("record_index"),
                     item.get("mode"),
                     self._classification(item),
-                    self._format_score(
-                        item.get("confidence", item.get("anomaly_score"))
+                    (
+                        f"{item['risk_score']:.1f}"
+                        if item.get("risk_score") is not None
+                        else "-"
                     ),
                 ]
                 for item in self.detection_results
@@ -1621,6 +1623,7 @@ class AlertsPage(DataPage):
                 "Alert ID",
                 "Classification",
                 "Severity",
+                "Risk Score",
                 "Status",
                 "Created",
                 "User",
@@ -1659,6 +1662,11 @@ class AlertsPage(DataPage):
                 alert.get("alert_id"),
                 classify_result(alert),
                 alert.get("severity"),
+                (
+                    f"{alert['risk_score']:.1f}"
+                    if alert.get("risk_score") is not None
+                    else "-"
+                ),
                 alert.get("status"),
                 alert.get("created_at"),
                 alert.get("context", {}).get("username", "-"),
