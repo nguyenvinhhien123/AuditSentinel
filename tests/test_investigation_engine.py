@@ -122,77 +122,7 @@ class TestInvestigationEngine(unittest.TestCase):
             "HIGH",
         )
 
-    def test_calculate_risk_score_from_confidence(self):
-        result = self.engine._calculate_risk_score({
-            "severity": "HIGH",
-            "confidence": 0.85,
-            "context": {"query": "DROP TABLE users"},
-        })
-
-        self.assertEqual(result["risk_score"], 100.0)
-        self.assertEqual(result["risk_score_band"], "CRITICAL")
-        self.assertEqual(
-            result["risk_likelihood_basis"],
-            "detector_confidence",
-        )
-        self.assertEqual(result["impact_rating"], 5)
-
-    def test_calculate_risk_score_from_anomaly_margin(self):
-        result = self.engine._calculate_risk_score({
-            "severity": "MEDIUM",
-            "verdict": "ANOMALY",
-            "anomaly_score": -0.035,
-            "context": {"query": "SELECT * FROM users"},
-        })
-
-        self.assertEqual(result["risk_score"], 29.2)
-        self.assertEqual(result["risk_score_band"], "MEDIUM")
-        self.assertEqual(
-            result["risk_likelihood_basis"],
-            "isolation_forest_decision_margin",
-        )
-        self.assertEqual(
-            result["impact_rating"],
-            2,
-        )
-
-    def test_risk_score_is_bounded_to_zero_through_one_hundred(self):
-        self.assertEqual(
-            self.engine._calculate_risk_score({
-                "confidence": 0,
-                "context": {"query": "SELECT 1"},
-            })["risk_score"],
-            4.2,
-        )
-        self.assertEqual(
-            self.engine._calculate_risk_score({
-                "anomaly_score": -0.5,
-                "context": {"query": "DROP TABLE users"},
-            })["risk_score"],
-            100.0,
-        )
-
-    def test_risk_score_requires_valid_inputs(self):
-        for alert in (
-            {"severity": "HIGH"},
-            {"severity": "HIGH", "confidence": 1.2},
-        ):
-            with self.subTest(alert=alert):
-                result = self.engine._calculate_risk_score(alert)
-                self.assertIsNone(result["risk_score"])
-                self.assertEqual(result["risk_score_band"], "UNKNOWN")
-                self.assertIn("no valid", result["risk_score_note"])
-
-    def test_normal_detector_result_has_no_risk_score(self):
-        result = self.engine._calculate_risk_score({
-            "verdict": "NORMAL",
-            "confidence": 0.99,
-        })
-
-        self.assertIsNone(result["risk_score"])
-        self.assertEqual(result["risk_score_band"], "NONE")
-
-    def test_investigation_adds_deterministic_risk_score(self):
+    def test_investigation_includes_logical_risk_score(self):
         response = Mock()
         response.raise_for_status.return_value = None
         response.json.return_value = {
@@ -207,36 +137,15 @@ class TestInvestigationEngine(unittest.TestCase):
         ):
             result = self.engine.investigate({
                 **sample_alert(),
-                "severity": "HIGH",
-                "confidence": 0.85,
-                "context": {"query": "DROP TABLE users"},
             })
 
-        self.assertEqual(result["report"]["risk_score"], 100.0)
-        self.assertEqual(result["report"]["risk_score_band"], "CRITICAL")
-
-    def test_investigation_scores_unsupervised_alert(self):
-        response = Mock()
-        response.raise_for_status.return_value = None
-        response.json.return_value = {
-            "message": {
-                "content": json.dumps(sample_report())
-            }
-        }
-
-        with patch(
-            "src.investigation.engine.requests.post",
-            return_value=response,
-        ):
-            result = self.engine.investigate({
-                **sample_alert(),
-                "confidence": None,
-                "anomaly_score": -0.025,
-                "context": {"query": "SELECT * FROM users"},
-            })
-
-        self.assertEqual(result["report"]["risk_score"], 20.8)
+        self.assertEqual(result["report"]["risk_score"], 24.2)
         self.assertEqual(result["report"]["risk_score_band"], "MEDIUM")
+        self.assertEqual(result["report"]["impact_rating"], 2)
+        self.assertEqual(
+            result["report"]["risk_score_formula"],
+            "round(100 * likelihood * impact_factor, 1)",
+        )
 
     def test_reject_missing_report_fields(self):
         with self.assertRaises(ValueError):

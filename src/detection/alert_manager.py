@@ -6,7 +6,10 @@ import json
 import tempfile
 import uuid
 
-from src.risk_scoring import calculate_risk_score, severity_from_risk_score
+from src.risk_scoring import (
+    calculate_risk_score,
+    severity_from_risk_score,
+)
 
 
 class AlertManager:
@@ -30,7 +33,10 @@ class AlertManager:
         "LOW",
     }
 
-    def __init__(self, storage_path="logs/alerts.jsonl"):
+    def __init__(
+        self,
+        storage_path="logs/alerts.jsonl",
+    ):
         self.storage_path = Path(storage_path).resolve()
         self.storage_path.parent.mkdir(
             parents=True,
@@ -45,35 +51,50 @@ class AlertManager:
         return datetime.now(timezone.utc).isoformat()
 
     @staticmethod
-    def _classify_severity(result, context=None):
-        verdict = result.get("verdict")
-        confidence = result.get("confidence")
-
+    def _classify_severity(result):
+        if "risk_score" in result:
+            return severity_from_risk_score(result["risk_score"])
         risk = calculate_risk_score(
-            confidence=confidence,
+            confidence=result.get("confidence"),
             anomaly_score=result.get("anomaly_score"),
-            context=context,
-            verdict=verdict,
+            context=result.get("context"),
+            verdict=result.get("verdict"),
         )
-        severity = severity_from_risk_score(risk["risk_score"])
-        if severity is not None:
-            return severity
+        return severity_from_risk_score(risk["risk_score"])
 
-        return None
-
-    @staticmethod
-    def _enrich_alert(alert):
+    def _enrich_alert(self, alert):
         enriched = dict(alert)
-        risk = calculate_risk_score(
+        context = enriched.get("context")
+        if isinstance(context, dict):
+            context = dict(context)
+            context.pop("cve_id", None)
+            context.pop("cve", None)
+            enriched["context"] = context
+        enriched.update(calculate_risk_score(
             confidence=enriched.get("confidence"),
             anomaly_score=enriched.get("anomaly_score"),
-            context=enriched.get("context"),
+            context=context,
             verdict=enriched.get("verdict"),
-        )
-        enriched.update(risk)
-        severity = severity_from_risk_score(risk["risk_score"])
+        ))
+        severity = severity_from_risk_score(enriched.get("risk_score"))
         if severity is not None:
             enriched["severity"] = severity
+        for field in (
+            "cve_id",
+            "cvss_v4_score",
+            "cvss_v4_severity",
+            "cvss_v4_vector",
+            "cvss_source",
+            "cvss_status",
+            "epss_probability",
+            "epss_percentile",
+            "epss_date",
+            "epss_source",
+            "epss_status",
+            "official_score_status",
+            "official_score_note",
+        ):
+            enriched.pop(field, None)
         return enriched
 
     @staticmethod
@@ -228,7 +249,13 @@ class AlertManager:
             raise TypeError("detection_result must be a dictionary")
 
         context = self._safe_context(record)
-        severity = self._classify_severity(detection_result, context)
+        risk_scores = calculate_risk_score(
+            confidence=detection_result.get("confidence"),
+            anomaly_score=detection_result.get("anomaly_score"),
+            context=context,
+            verdict=detection_result.get("verdict"),
+        )
+        severity = severity_from_risk_score(risk_scores["risk_score"])
 
         if severity is None:
             return {
@@ -252,13 +279,8 @@ class AlertManager:
             "model_name": model_name,
             "context": context,
             "resolution": None,
+            **risk_scores,
         }
-        alert.update(calculate_risk_score(
-            confidence=alert["confidence"],
-            anomaly_score=alert["anomaly_score"],
-            context=alert["context"],
-            verdict=alert["verdict"],
-        ))
 
         with self.storage_path.open(
             "a",
@@ -353,6 +375,7 @@ class AlertManager:
 
         latest = []
         for index, alert in enumerate(self._iter_alerts()):
+            alert = self._enrich_alert(alert)
             if severity and alert.get("severity") != severity:
                 continue
             if status and alert.get("status") != status:
@@ -366,7 +389,7 @@ class AlertManager:
                 heapq.heapreplace(latest, entry)
 
         latest.sort(key=lambda entry: entry[:2], reverse=True)
-        return [self._enrich_alert(entry[2]) for entry in latest]
+        return [entry[2] for entry in latest]
 
     def list_recent_alerts(
         self,
@@ -393,23 +416,21 @@ class AlertManager:
 
         alerts = []
         for alert in self._iter_alerts_reverse():
-            if severity and alert.get("severity") != severity:
-                continue
             if status and alert.get("status") != status:
+                continue
+            alert = self._enrich_alert(alert)
+            if severity and alert.get("severity") != severity:
                 continue
 
             alerts.append(alert)
             if len(alerts) == limit:
                 break
 
-        return [
-            self._enrich_alert(alert)
-            for alert in sorted(
-                alerts,
-                key=lambda alert: alert.get("created_at", ""),
-                reverse=True,
-            )
-        ]
+        return sorted(
+            alerts,
+            key=lambda alert: alert.get("created_at", ""),
+            reverse=True,
+        )
 
     def get_alert(self, alert_id):
         """Find an alert by scanning backward from the newest stored record."""

@@ -9,7 +9,7 @@ from src.detection.classification import (
     SUSPICIOUS_LABELS,
     classify_supervised_label,
 )
-from src.risk_scoring import calculate_risk_score, severity_from_risk_score
+from src.risk_scoring import calculate_risk_score
 from src.training.auto_trainer import _build_feature_matrix
 
 
@@ -241,17 +241,13 @@ class DetectionEngine:
                     ),
                 })
 
-        for index, result in enumerate(results):
-            risk = calculate_risk_score(
+        for result, record in zip(results, records):
+            result.update(calculate_risk_score(
                 confidence=result.get("confidence"),
                 anomaly_score=result.get("anomaly_score"),
-                context=records[index],
+                context=record,
                 verdict=result.get("verdict"),
-            )
-            result.update(risk)
-            result["severity"] = severity_from_risk_score(
-                risk["risk_score"]
-            )
+            ))
 
         alert_count = sum(
             result["alert"] for result in results

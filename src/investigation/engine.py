@@ -262,15 +262,6 @@ ALERT DATA:
 
         return report
 
-    @classmethod
-    def _calculate_risk_score(cls, alert):
-        return calculate_risk_score(
-            confidence=alert.get("confidence"),
-            anomaly_score=alert.get("anomaly_score"),
-            context=alert.get("context"),
-            verdict=alert.get("verdict"),
-        )
-
     def check_connection(self):
         """Check whether the local Ollama API is reachable."""
 
@@ -354,7 +345,12 @@ ALERT DATA:
 
         report = self._extract_json(content)
         report = self._validate_report(report)
-        report.update(self._calculate_risk_score(alert_data))
+        report.update(calculate_risk_score(
+            confidence=alert.get("confidence"),
+            anomaly_score=alert.get("anomaly_score"),
+            context=alert.get("context"),
+            verdict=alert.get("verdict"),
+        ))
 
         return {
             "status": "COMPLETED",

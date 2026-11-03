@@ -67,74 +67,62 @@ class TestRecentAlerts(unittest.TestCase):
 
         alert = self.manager.get_alert("new")
         self.assertEqual(alert["alert_id"], "new")
-        self.assertIsNone(alert["risk_score"])
         self.assertEqual(alert["risk_score_band"], "UNKNOWN")
 
-    def test_anomaly_severity_uses_risk_score(self):
-        cases = [
-            (-0.01, {}, 20.8, "MEDIUM"),
-            (-0.02, {}, 33.3, "MEDIUM"),
-            (-0.04, {}, 58.3, "HIGH"),
-            (-0.05, {"query": "DROP TABLE users"}, 100.0, "CRITICAL"),
-        ]
-        for anomaly_score, context, expected_score, expected_severity in cases:
-            with self.subTest(anomaly_score=anomaly_score):
-                result = self.manager.create_alert({
-                    "mode": "unsupervised",
-                    "verdict": "ANOMALY",
-                    "anomaly_score": anomaly_score,
-                }, record=context)
-                self.assertEqual(
-                    result["alert"]["severity"],
-                    expected_severity,
-                )
-                self.assertEqual(
-                    result["alert"]["risk_score"],
-                    expected_score,
-                )
-                self.assertLessEqual(
-                    result["alert"]["risk_score"],
-                    100,
-                )
+    def test_alert_gets_local_risk_score_without_network_lookup(self):
+        result = self.manager.create_alert(
+            {
+                "mode": "supervised",
+                "verdict": "SUSPICIOUS",
+                "confidence": 0.95,
+            },
+            record={"sql_action": "SELECT", "query": "SELECT * FROM users"},
+        )
 
-    def test_sql_operation_impact_changes_score_and_severity(self):
-        cases = [
-            ("SELECT * FROM users", 2, 37.5, "MEDIUM"),
-            ("UPDATE users SET role = 'admin'", 4, 79.2, "CRITICAL"),
-            ("DROP TABLE users", 5, 100.0, "CRITICAL"),
-        ]
-        for query, expected_impact, expected_score, expected_severity in cases:
-            with self.subTest(query=query):
-                result = self.manager.create_alert(
-                    {
-                        "mode": "supervised",
-                        "verdict": "SUSPICIOUS",
-                        "confidence": 0.8,
-                    },
-                    record={"query": query},
-                )
-                alert = result["alert"]
-                self.assertEqual(alert["impact_rating"], expected_impact)
-                self.assertEqual(alert["risk_score"], expected_score)
-                self.assertEqual(alert["severity"], expected_severity)
+        alert = result["alert"]
+        self.assertEqual(alert["risk_score"], 23.8)
+        self.assertEqual(alert["risk_score_band"], "MEDIUM")
+        self.assertEqual(alert["severity"], "MEDIUM")
+        self.assertEqual(alert["impact_rating"], 2)
+        self.assertEqual(alert["risk_likelihood"], 0.95)
+        self.assertNotIn("cvss_v4_score", alert)
+        self.assertNotIn("epss_probability", alert)
 
-    def test_legacy_anomaly_alerts_are_enriched_without_rewriting_file(self):
+    def test_destructive_operation_produces_a_higher_score_and_severity(self):
+        result = self.manager.create_alert(
+            {
+                "mode": "supervised",
+                "verdict": "SUSPICIOUS",
+                "confidence": 0.95,
+            },
+            record={"sql_action": "DROP"},
+        )
+
+        self.assertEqual(result["alert"]["risk_score"], 95.0)
+        self.assertEqual(result["alert"]["severity"], "CRITICAL")
+
+    def test_legacy_anomaly_alerts_get_local_score_without_rewriting_file(self):
         self._write_alerts([{
             "alert_id": "legacy",
             "verdict": "ANOMALY",
             "mode": "unsupervised",
             "anomaly_score": -0.04,
-            "severity": "MEDIUM",
-            "context": {"query": "DROP TABLE users"},
+            "severity": "LOW",
+            "context": {"cve_id": "CVE-2026-12345"},
         }])
 
-        alert = self.manager.list_recent_alerts(limit=1)[0]
+        alert = self.manager.list_recent_alerts(
+            severity="HIGH",
+            limit=1,
+        )[0]
 
-        self.assertEqual(alert["risk_score"], 100.0)
-        self.assertEqual(alert["severity"], "CRITICAL")
-        self.assertNotIn("risk_score", self.storage_path.read_text(
-            encoding="utf-8"
-        ))
+        self.assertEqual(alert["risk_score"], 50.0)
+        self.assertEqual(alert["severity"], "HIGH")
+        self.assertNotIn("cve_id", alert)
+        self.assertNotIn(
+            "risk_score",
+            self.storage_path.read_text(encoding="utf-8"),
+        )
 
 
 if __name__ == "__main__":

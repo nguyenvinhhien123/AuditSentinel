@@ -21,8 +21,8 @@ def main():
         storage_path=base_dir / "alerts.jsonl"
     )
 
-    # TEST 1: Score an alert from detector and SQL operation evidence.
-    print("\n[TEST 1] Score Alert")
+    # TEST 1: Create a critical alert.
+    print("\n[TEST 1] Create Critical Alert")
 
     critical_result = {
         "record_index": 0,
@@ -40,18 +40,18 @@ def main():
         record={
             "username": "admin",
             "src_ip": "192.168.1.10",
-            "query": "SELECT * FROM users UNION SELECT * FROM accounts",
+            "query": "DROP TABLE users",
             "password": "should_not_be_saved",
         },
     )
 
     assert outcome["status"] == "CREATED"
-    assert outcome["alert"]["severity"] == "MEDIUM"
+    assert outcome["alert"]["severity"] == "CRITICAL"
     assert "password" not in outcome["alert"]["context"]
 
     critical_id = outcome["alert"]["alert_id"]
 
-    print("[PASS] Score Alert")
+    print("[PASS] Create Critical Alert")
 
     # TEST 2: Create a high alert.
     print("\n[TEST 2] Create High Alert")
@@ -66,7 +66,7 @@ def main():
 
     high = manager.create_alert(high_result)
 
-    assert high["alert"]["severity"] == "HIGH"
+    assert high["alert"]["severity"] == "MEDIUM"
 
     print("[PASS] Create High Alert")
 
@@ -98,7 +98,7 @@ def main():
 
     review = manager.create_alert(review_result)
 
-    assert review["alert"]["severity"] == "MEDIUM"
+    assert review["alert"]["severity"] == "LOW"
 
     print("[PASS] Create Review Alert")
 
@@ -173,7 +173,7 @@ def main():
         severity="CRITICAL"
     )
 
-    assert len(critical_alerts) == 2
+    assert len(critical_alerts) == 1
 
     new_alerts = manager.list_alerts(
         status="NEW"
@@ -256,8 +256,8 @@ def main():
     print("Status counts:", statistics["status_counts"])
 
     assert statistics["total_alerts"] == 6
-    assert statistics["severity_counts"]["CRITICAL"] == 3
-    assert statistics["severity_counts"]["HIGH"] == 1
+    assert statistics["severity_counts"]["CRITICAL"] == 1
+    assert statistics["severity_counts"]["HIGH"] == 3
     assert statistics["severity_counts"]["MEDIUM"] == 1
     assert statistics["severity_counts"]["LOW"] == 1
 

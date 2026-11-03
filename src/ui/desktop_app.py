@@ -1463,7 +1463,12 @@ class DetectionPage(DataPage):
             "Results distinguish Anomaly, Normal, and Review. Anomaly means "
             "the model flagged a suspicious pattern, not that an attack is "
             "confirmed. Detection does not block database activity.",
-            ["Record", "Mode", "Classification", "Score"],
+            [
+                "Record",
+                "Mode",
+                "Classification",
+                "Risk Score",
+            ],
             parent,
         )
         self.detection_results: list[dict] = []
@@ -1531,10 +1536,9 @@ class DetectionPage(DataPage):
                     item.get("record_index"),
                     item.get("mode"),
                     self._classification(item),
-                    (
-                        f"{item['risk_score']:.1f}"
-                        if item.get("risk_score") is not None
-                        else "-"
+                    self._format_score(
+                        item.get("risk_score"),
+                        item.get("risk_score_band"),
                     ),
                 ]
                 for item in self.detection_results
@@ -1590,10 +1594,12 @@ class DetectionPage(DataPage):
         return classify_result(result)
 
     @staticmethod
-    def _format_score(value) -> str:
+    def _format_score(value, band=None) -> str:
         if isinstance(value, (int, float)):
-            return f"{value:.2f}"
-        return "-"
+            if band and band not in {"NONE", "UNKNOWN"}:
+                return f"{value:.1f} ({band})"
+            return f"{value:.1f}"
+        return "N/A"
 
     def show_selected_event(self) -> None:
         selected = self.table.selectionModel().selectedRows()
@@ -1622,7 +1628,7 @@ class AlertsPage(DataPage):
             [
                 "Alert ID",
                 "Classification",
-                "Severity",
+                "Alert Severity",
                 "Risk Score",
                 "Status",
                 "Created",
@@ -1662,10 +1668,9 @@ class AlertsPage(DataPage):
                 alert.get("alert_id"),
                 classify_result(alert),
                 alert.get("severity"),
-                (
-                    f"{alert['risk_score']:.1f}"
-                    if alert.get("risk_score") is not None
-                    else "-"
+                DetectionPage._format_score(
+                    alert.get("risk_score"),
+                    alert.get("risk_score_band"),
                 ),
                 alert.get("status"),
                 alert.get("created_at"),
