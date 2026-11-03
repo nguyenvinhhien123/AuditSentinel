@@ -122,6 +122,53 @@ class TestInvestigationEngine(unittest.TestCase):
             "HIGH",
         )
 
+    def test_calculate_risk_score(self):
+        result = self.engine._calculate_risk_score({
+            "severity": "HIGH",
+            "confidence": 0.85,
+        })
+
+        self.assertEqual(result["risk_score"], 68.0)
+        self.assertEqual(result["risk_score_band"], "MEDIUM")
+        self.assertEqual(
+            result["risk_score_inputs"]["severity_impact_weight"],
+            0.8,
+        )
+
+    def test_risk_score_requires_valid_inputs(self):
+        for alert in (
+            {"severity": "HIGH"},
+            {"severity": "HIGH", "confidence": 1.2},
+            {"severity": "UNKNOWN", "confidence": 0.8},
+        ):
+            with self.subTest(alert=alert):
+                result = self.engine._calculate_risk_score(alert)
+                self.assertIsNone(result["risk_score"])
+                self.assertEqual(result["risk_score_band"], "UNKNOWN")
+                self.assertIn("required", result["risk_score_note"])
+
+    def test_investigation_adds_deterministic_risk_score(self):
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "message": {
+                "content": json.dumps(sample_report())
+            }
+        }
+
+        with patch(
+            "src.investigation.engine.requests.post",
+            return_value=response,
+        ):
+            result = self.engine.investigate({
+                **sample_alert(),
+                "severity": "HIGH",
+                "confidence": 0.85,
+            })
+
+        self.assertEqual(result["report"]["risk_score"], 68.0)
+        self.assertEqual(result["report"]["risk_score_band"], "MEDIUM")
+
     def test_reject_missing_report_fields(self):
         with self.assertRaises(ValueError):
             self.engine._validate_report({

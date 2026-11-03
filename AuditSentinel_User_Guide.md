@@ -152,6 +152,14 @@ Detection analyzes the selected offline file and stores alerts; it does not bloc
 1. Confirm that the Ollama service is running locally and that `qwen2.5:1.5b` (or the configured model) is available.
 2. Open **AI Investigation**, click **Refresh alerts**, and select the alert to investigate.
 3. Click **Investigate**. The application asks the configured local Ollama model to analyze the selected alert and saves an investigation report.
+
+The report includes an internal risk-priority estimate:
+
+`Risk score = 100 × detector confidence × severity impact weight`
+
+Severity impact weights are LOW = 0.2, MEDIUM = 0.5, HIGH = 0.8, and CRITICAL = 1.0. The score is rounded to one decimal place and categorized as NONE (0), LOW (above 0 and below 40), MEDIUM (40 to below 70), HIGH (70 to below 90), or CRITICAL (90 to 100). For example, a HIGH alert with confidence 0.85 scores 68.0 (MEDIUM). The report records the inputs and formula. If confidence is missing or outside 0–1, or severity is unrecognized, the score is UNKNOWN rather than zero.
+
+This is an application-specific prioritization estimate, not an official CVSS score or a calibrated probability of a real-world attack. The LLM's qualitative `risk_level` remains a separate assessment.
 4. Review the returned status and report. Click **Refresh reports** to list saved investigations; select a report to view its details.
 
 Investigation depends on Ollama. It does not execute SQL, scripts, or operating-system commands. Treat its narrative as analysis requiring human verification.

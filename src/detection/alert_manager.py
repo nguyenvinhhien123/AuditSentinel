@@ -138,6 +138,46 @@ class AlertManager:
     def _read_alerts(self):
         return list(self._iter_alerts())
 
+    def _iter_alerts_reverse(self, chunk_size=64 * 1024):
+        try:
+            with self.storage_path.open("rb") as file:
+                position = file.seek(0, 2)
+                pending = b""
+
+                while position:
+                    size = min(chunk_size, position)
+                    position -= size
+                    file.seek(position)
+                    lines = (file.read(size) + pending).split(b"\n")
+                    pending = lines[0]
+
+                    for line in reversed(lines[1:]):
+                        if not line.strip():
+                            continue
+                        yield self._parse_alert_line(line)
+
+                if pending.strip():
+                    yield self._parse_alert_line(pending)
+
+        except OSError as exc:
+            raise RuntimeError(
+                f"Cannot read alert storage: {exc}"
+            ) from exc
+
+    @staticmethod
+    def _parse_alert_line(line):
+        try:
+            alert = json.loads(line)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError(
+                "Invalid alert JSON in alert storage"
+            ) from exc
+
+        if not isinstance(alert, dict):
+            raise ValueError("Invalid alert record in alert storage")
+
+        return alert
+
     def _write_alerts(self, alerts):
         temporary_path = self.storage_path.with_suffix(".tmp")
 
@@ -305,6 +345,59 @@ class AlertManager:
 
         latest.sort(key=lambda entry: entry[:2], reverse=True)
         return [entry[2] for entry in latest]
+
+    def list_recent_alerts(
+        self,
+        severity=None,
+        status=None,
+        limit=100,
+    ):
+        """List the newest appended alerts without scanning older history."""
+
+        if not isinstance(limit, int) or limit < 1:
+            raise ValueError("limit must be a positive integer")
+
+        if severity is not None:
+            severity = severity.upper()
+
+            if severity not in self.VALID_SEVERITIES:
+                raise ValueError("Invalid severity filter")
+
+        if status is not None:
+            status = status.upper()
+
+            if status not in self.VALID_STATUSES:
+                raise ValueError("Invalid status filter")
+
+        alerts = []
+        for alert in self._iter_alerts_reverse():
+            if severity and alert.get("severity") != severity:
+                continue
+            if status and alert.get("status") != status:
+                continue
+
+            alerts.append(alert)
+            if len(alerts) == limit:
+                break
+
+        return sorted(
+            alerts,
+            key=lambda alert: alert.get("created_at", ""),
+            reverse=True,
+        )
+
+    def get_alert(self, alert_id):
+        """Find an alert by scanning backward from the newest stored record."""
+
+        if not isinstance(alert_id, str) or not alert_id.strip():
+            raise ValueError("alert_id must be a non-empty string")
+
+        alert_id = alert_id.strip()
+        for alert in self._iter_alerts_reverse():
+            if alert.get("alert_id") == alert_id:
+                return alert
+
+        return None
 
     def update_status(
         self,

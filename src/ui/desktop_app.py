@@ -516,7 +516,7 @@ class TaskWorker(QThread):
                 self.status.emit("Loading alerts...")
                 alerts = AlertManager(
                     storage_path=session_root / "logs" / "alerts.jsonl"
-                ).list_alerts(
+                ).list_recent_alerts(
                     status=self.payload.get("status") or None,
                     limit=500,
                 )

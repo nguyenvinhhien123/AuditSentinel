@@ -45,6 +45,10 @@ class InvestigationManager:
 
         alert_id = self._safe_alert_id(alert_id)
 
+        get_alert = getattr(self.alert_manager, "get_alert", None)
+        if callable(get_alert):
+            return get_alert(alert_id)
+
         alerts = self.alert_manager.list_alerts(limit=1_000_000)
 
         for alert in alerts:
