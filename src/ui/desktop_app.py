@@ -1070,13 +1070,30 @@ class DataPage(QWidget):
         self.table.setMinimumHeight(190)
         layout.addWidget(self.table, 3)
 
+        details_header = QHBoxLayout()
         details_heading = QLabel("Details")
         details_heading.setObjectName("sectionHeading")
-        layout.addWidget(details_heading)
+        details_header.addWidget(details_heading)
+        details_header.addStretch()
+        self.details_expand_button = QPushButton("Expand details")
+        self.details_expand_button.setAccessibleName("Expand details")
+        self.details_expand_button.clicked.connect(
+            self.toggle_details_expanded
+        )
+        details_header.addWidget(self.details_expand_button)
+        layout.addLayout(details_header)
         self.output = QPlainTextEdit()
         self.output.setReadOnly(True)
         self.output.setMinimumHeight(140)
         layout.addWidget(self.output, 2)
+        self._details_expanded = False
+
+    def toggle_details_expanded(self) -> None:
+        self._details_expanded = not self._details_expanded
+        self.table.setVisible(not self._details_expanded)
+        button_text = "Show table" if self._details_expanded else "Expand details"
+        self.details_expand_button.setText(button_text)
+        self.details_expand_button.setAccessibleName(button_text)
 
     def set_rows(
         self,

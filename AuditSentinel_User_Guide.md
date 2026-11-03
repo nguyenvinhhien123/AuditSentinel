@@ -43,6 +43,7 @@ These are sequential workflow roles, not three independent AI models. Detection 
 | Reports / System Status | Export an operational summary and inspect local paths and safety settings. |
 
 After an operation completes, its page shows a concise result summary above the full JSON details. Existing tables continue to show records such as alerts, models, proposals, and simulation runs.
+Use **Expand details** above the Details panel to give the output more room; choose **Show table** to return to the table view.
 
 ## 2. Requirements and installation
 
