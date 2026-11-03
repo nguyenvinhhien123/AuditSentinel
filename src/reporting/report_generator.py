@@ -5,6 +5,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from src.detection.classification import classify_result
+
 
 class ReportGenerator:
     """Build and export a privacy-conscious report from local application data."""
@@ -104,7 +106,10 @@ class ReportGenerator:
             "model_id",
             "model_name",
         )
-        return {key: alert.get(key) for key in fields}
+        return {
+            **{key: alert.get(key) for key in fields},
+            "classification": classify_result(alert),
+        }
 
     @staticmethod
     def _simulation_summary(run: dict) -> dict:
@@ -165,6 +170,7 @@ class ReportGenerator:
                     "created_at",
                     "severity",
                     "status",
+                    "classification",
                     "mode",
                     "verdict",
                     "record_index",
@@ -175,7 +181,7 @@ class ReportGenerator:
             for alert in alerts["latest"]
         )
         if not alert_rows:
-            alert_rows = '<tr><td colspan="7">No alerts recorded.</td></tr>'
+            alert_rows = '<tr><td colspan="8">No alerts recorded.</td></tr>'
 
         model_rows = "".join(
             "<tr>"
@@ -264,7 +270,7 @@ class ReportGenerator:
   <table><thead><tr><th>Status</th><th>Count</th></tr></thead><tbody>{status_rows}</tbody></table>
   <h2>Latest alerts (up to {ReportGenerator.RECENT_ITEMS_LIMIT})</h2>
   <table>
-    <thead><tr><th>Created</th><th>Severity</th><th>Status</th><th>Mode</th><th>Verdict</th><th>Record</th><th>Model</th></tr></thead>
+    <thead><tr><th>Created</th><th>Severity</th><th>Status</th><th>Classification</th><th>Mode</th><th>Verdict</th><th>Record</th><th>Model</th></tr></thead>
     <tbody>{alert_rows}</tbody>
   </table>
   <h2>Registered models</h2>

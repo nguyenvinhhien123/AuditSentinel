@@ -4,27 +4,12 @@ from pathlib import Path
 import joblib
 import numpy as np
 
+from src.detection.classification import (
+    NORMAL_LABELS,
+    SUSPICIOUS_LABELS,
+    classify_supervised_label,
+)
 from src.training.auto_trainer import _build_feature_matrix
-
-
-SUSPICIOUS_LABELS = {
-    "attack",
-    "malicious",
-    "intrusion",
-    "intrusion_attempt",
-    "anomaly",
-    "threat",
-    "suspicious",
-    "unauthorized",
-}
-
-NORMAL_LABELS = {
-    "normal",
-    "benign",
-    "legitimate",
-    "safe",
-    "clean",
-}
 
 
 class DetectionEngine:
@@ -148,15 +133,7 @@ class DetectionEngine:
 
     @staticmethod
     def _classify_supervised_label(label):
-        normalized = str(label).strip().lower().replace("-", "_").replace(" ", "_")
-
-        if normalized in SUSPICIOUS_LABELS:
-            return "SUSPICIOUS"
-
-        if normalized in NORMAL_LABELS:
-            return "NORMAL"
-
-        return "REVIEW"
+        return classify_supervised_label(label)
 
     def detect(self, record, mode=None):
         """Analyze one database audit-log record."""

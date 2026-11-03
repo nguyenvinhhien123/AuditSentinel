@@ -7,7 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QColor, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -30,6 +30,11 @@ from PySide6.QtWidgets import (
     QSpinBox,
 )
 
+from src.detection.classification import (
+    classification_explanation,
+    classify_result,
+)
+
 
 INGESTION_EXTENSIONS = {".csv", ".tsv", ".jsonl", ".ndjson", ".parquet"}
 APP_ROOT = Path(__file__).resolve().parents[2]
@@ -40,6 +45,12 @@ APP_ICON = (
     if CUSTOM_APP_ICON.is_file()
     else DEFAULT_APP_ICON
 )
+
+CLASSIFICATION_COLORS = {
+    "Anomaly": QColor("#FF7777"),
+    "Normal": QColor("#75D99A"),
+    "Review": QColor("#F4C66A"),
+}
 
 
 def fingerprint_file(file_path: str) -> str:
@@ -201,6 +212,11 @@ class TaskWorker(QThread):
                 results = []
                 records_analyzed = 0
                 alerts_created = 0
+                classification_counts = {
+                    "Anomaly": 0,
+                    "Normal": 0,
+                    "Review": 0,
+                }
                 benchmark_records = 0
                 confusion_counts = {
                     "true_positive": 0,
@@ -241,6 +257,8 @@ class TaskWorker(QThread):
                             mode=requested_mode,
                         )
                         detection = batch_result["detection"]
+                        for item in detection["results"]:
+                            classification_counts[classify_result(item)] += 1
                         if model_details is None:
                             model_details = {
                                 key: detection[key]
@@ -321,6 +339,7 @@ class TaskWorker(QThread):
                     "status": "COMPLETED",
                     **(model_details or {}),
                     "records_analyzed": records_analyzed,
+                    "classification_counts": classification_counts,
                     "alerts": alerts_created,
                     "normal_or_reviewed": records_analyzed - alerts_created,
                     "results": results,
@@ -502,6 +521,119 @@ class TaskWorker(QThread):
                     limit=500,
                 )
                 self.succeeded.emit(alerts)
+
+            elif self.task == "update_alert_status":
+                from src.detection.alert_manager import AlertManager
+
+                session_root = Path(self.payload["session_root"])
+                self.status.emit("Updating alert status...")
+                result = AlertManager(
+                    storage_path=session_root / "logs" / "alerts.jsonl"
+                ).update_status(
+                    self.payload["alert_id"],
+                    self.payload["status"],
+                    resolution=self.payload.get("resolution"),
+                    progress_callback=self.progress.emit,
+                )
+                self.succeeded.emit(result)
+
+            elif self.task == "load_models":
+                from src.registry.model_registry import ModelRegistry
+
+                self.status.emit("Loading registered models...")
+                models = ModelRegistry(project_root=APP_ROOT).list_models()
+                self.succeeded.emit(models)
+
+            elif self.task in {
+                "verify_model",
+                "activate_model",
+                "deactivate_model",
+            }:
+                from src.registry.model_registry import ModelRegistry
+
+                self.status.emit("Verifying model integrity...")
+                registry = ModelRegistry(project_root=APP_ROOT)
+                if self.task == "verify_model":
+                    result = registry.verify_model(self.payload["model_id"])
+                elif self.task == "activate_model":
+                    result = registry.activate_model(self.payload["model_id"])
+                else:
+                    result = registry.deactivate_model(self.payload["mode"])
+                self.succeeded.emit(result)
+
+            elif self.task == "load_reports":
+                from src.investigation.manager import InvestigationManager
+
+                session_root = Path(self.payload["session_root"])
+                self.status.emit("Loading investigation reports...")
+                reports = InvestigationManager(
+                    report_dir=session_root / "reports" / "investigations"
+                ).list_reports(limit=500)
+                self.succeeded.emit(reports)
+
+            elif self.task == "load_report":
+                from src.investigation.manager import InvestigationManager
+
+                session_root = Path(self.payload["session_root"])
+                self.status.emit("Loading investigation report...")
+                report = InvestigationManager(
+                    report_dir=session_root / "reports" / "investigations"
+                ).get_report(self.payload["report_id"])
+                self.succeeded.emit(report)
+
+            elif self.task == "load_response_actions":
+                from src.response.engine import ResponseEngine
+
+                session_root = Path(self.payload["session_root"])
+                self.status.emit("Loading response proposals...")
+                actions = ResponseEngine(
+                    storage_path=session_root / "logs" / "response_actions.jsonl",
+                    simulation_mode=True,
+                    require_approval=True,
+                ).list_actions(limit=500)
+                self.succeeded.emit(actions)
+
+            elif self.task == "load_prevention_history":
+                from src.response.prevention import PreventionSimulator
+
+                session_root = Path(self.payload["session_root"])
+                self.status.emit("Loading simulation history...")
+                runs = PreventionSimulator(
+                    audit_path=session_root
+                    / "logs"
+                    / "prevention_simulations.jsonl"
+                ).list_runs(limit=500)
+                self.succeeded.emit(runs)
+
+            elif self.task == "load_system_status":
+                session_root = Path(self.payload["session_root"])
+                self.status.emit("Checking local system status...")
+                alert_path = session_root / "logs" / "alerts.jsonl"
+                checks = [
+                    ("Project root", APP_ROOT.is_dir(), str(APP_ROOT)),
+                    (
+                        "Raw datasets",
+                        (APP_ROOT / "dataset" / "raw").is_dir(),
+                        str(APP_ROOT / "dataset" / "raw"),
+                    ),
+                    (
+                        "Processed datasets",
+                        (APP_ROOT / "dataset" / "processed").is_dir(),
+                        str(APP_ROOT / "dataset" / "processed"),
+                    ),
+                    (
+                        "Model directory",
+                        (APP_ROOT / "models").is_dir(),
+                        str(APP_ROOT / "models"),
+                    ),
+                    ("Alert storage", alert_path.is_file(), str(alert_path)),
+                    (
+                        "Response execution",
+                        True,
+                        "SIMULATION ONLY; approval required",
+                    ),
+                ]
+                self.succeeded.emit(checks)
 
             elif self.task == "load_dashboard":
                 from src.detection.alert_manager import AlertManager
@@ -904,6 +1036,12 @@ class DataPage(QWidget):
         self.controls.setSpacing(8)
         layout.addLayout(self.controls)
 
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
+
         self.status_label = QLabel("Ready.")
         self.status_label.setObjectName("pageStatus")
         layout.addWidget(self.status_label)
@@ -961,6 +1099,14 @@ class DataPage(QWidget):
             return None
         item = self.table.item(selected[0].row(), column)
         return item.text() if item is not None else None
+
+    def color_classification_cells(self, column: int) -> None:
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, column)
+            if item is not None:
+                item.setForeground(
+                    CLASSIFICATION_COLORS.get(item.text(), QColor("#66B2FF"))
+                )
 
     def show_json(self, result: object) -> None:
         details = json.dumps(
@@ -1032,12 +1178,6 @@ class ModelTrainingPage(DataPage):
             ["Training result", "Details"],
             parent,
         )
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setFormat("Loading dataset: %p%")
-        self.progress_bar.setVisible(False)
-        self.layout().insertWidget(3, self.progress_bar)
 
         self.file_path = QLineEdit()
         self.file_path.setPlaceholderText("Select CSV, TSV, JSONL or Parquet")
@@ -1129,8 +1269,10 @@ class ModelTrainingPage(DataPage):
             f"({result['records_loaded']} records)."
         )
         self.show_json(result)
-        self.main_window.refresh_registry()
-        self.main_window.refresh_dashboard()
+        self.main_window.queue_refresh_after_workflow(
+            "Model Registry",
+            "Dashboard",
+        )
 
 
 class ModelRegistryPage(DataPage):
@@ -1141,6 +1283,7 @@ class ModelRegistryPage(DataPage):
             ["Model ID", "Name", "Mode", "Algorithm", "State"],
             parent,
         )
+        self.models: list[dict] = []
         refresh_button = QPushButton("Refresh")
         verify_button = QPushButton("Verify selected")
         activate_button = QPushButton("Activate selected")
@@ -1155,9 +1298,15 @@ class ModelRegistryPage(DataPage):
             button.clicked.connect(callback)
 
     def refresh(self) -> None:
-        from src.registry.model_registry import ModelRegistry
+        self.main_window.run_background(
+            "load_models",
+            on_success=self.on_models_loaded,
+            page=self,
+        )
 
-        self.models = ModelRegistry(project_root=APP_ROOT).list_models()
+    def on_models_loaded(self, models: list[dict]) -> None:
+        self.models = models
+        self.main_window.registry_needs_refresh = False
         self.set_rows([
             [
                 model.get("model_id"),
@@ -1178,70 +1327,72 @@ class ModelRegistryPage(DataPage):
         )
 
     def verify_selected(self) -> None:
-        from src.registry.model_registry import ModelRegistry
-
         model = self.selected_model()
         if model is None:
             self.report_error("Select a registered model first.")
             return
-        result = ModelRegistry(project_root=APP_ROOT).verify_model(
-            model["model_id"]
+        self.main_window.run_background(
+            "verify_model",
+            payload={"model_id": model["model_id"]},
+            on_success=self.on_verified,
+            page=self,
         )
+
+    def on_verified(self, result: dict) -> None:
         self.status_label.setText(f"Integrity: {result['status']}")
         self.show_json(result)
 
     def activate_selected(self) -> None:
-        from src.registry.model_registry import ModelRegistry
-
         model = self.selected_model()
         if model is None:
             self.report_error("Select a registered model first.")
             return
-        result = ModelRegistry(project_root=APP_ROOT).activate_model(
-            model["model_id"]
+        self.main_window.run_background(
+            "activate_model",
+            payload={"model_id": model["model_id"]},
+            on_success=self.on_model_updated,
+            page=self,
         )
-        self.status_label.setText(
-            f"Activated {model['mode']} model after checksum verification."
-        )
-        self.show_json(result)
-        self.refresh()
-        self.main_window.refresh_dashboard()
 
     def deactivate_selected(self) -> None:
-        from src.registry.model_registry import ModelRegistry
-
         model = self.selected_model()
         if model is None:
             self.report_error("Select a registered model to choose its mode.")
             return
-        result = ModelRegistry(project_root=APP_ROOT).deactivate_model(
-            model["mode"]
+        self.main_window.run_background(
+            "deactivate_model",
+            payload={"mode": model["mode"]},
+            on_success=self.on_model_updated,
+            page=self,
         )
-        self.status_label.setText(
-            f"{model['mode'].title()} active model deactivated."
-        )
+
+    def on_model_updated(self, result: dict) -> None:
+        self.status_label.setText(f"Model operation: {result.get('status', 'COMPLETED')}")
         self.show_json(result)
-        self.refresh()
-        self.main_window.refresh_dashboard()
+        self.main_window.registry_needs_refresh = True
+        self.main_window.dashboard_needs_refresh = True
+        self.main_window.queue_refresh_after_workflow(
+            "Model Registry",
+            "Dashboard",
+        )
 
 
 class DetectionPage(DataPage):
     def __init__(self, parent=None):
         super().__init__(
             "Agent 1 — Detection & Alerts",
-            "Agent 1 uses the active supervised or unsupervised ML model to "
-            "analyze audit logs and save suspicious/anomalous alerts. "
-            "It does not block database activity.",
+            "Results distinguish Anomaly, Normal, and Review. Anomaly means "
+            "the model flagged a suspicious pattern, not that an attack is "
+            "confirmed. Detection does not block database activity.",
             ["Record", "Mode", "Classification", "Score"],
             parent,
         )
         self.detection_results: list[dict] = []
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setFormat("Reading/analyzing dataset: %p%")
-        self.progress_bar.setVisible(False)
-        self.layout().insertWidget(4, self.progress_bar)
+        self.classification_summary = QLabel(
+            "Classification totals appear after detection."
+        )
+        self.classification_summary.setObjectName("classificationSummary")
+        self.layout().insertWidget(4, self.classification_summary)
         self.table.itemSelectionChanged.connect(self.show_selected_event)
         self.output.setPlaceholderText(
             "Select a detected event to inspect its details."
@@ -1309,16 +1460,35 @@ class DetectionPage(DataPage):
             ],
             optimize=True,
         )
+        counts = detection["classification_counts"]
+        self.classification_summary.setText(
+            f"Anomaly: {counts['Anomaly']:,}    "
+            f"Normal: {counts['Normal']:,}    "
+            f"Review: {counts['Review']:,}"
+        )
+        self.color_classification_cells(2)
+        self.main_window.last_detection_summary = {
+            "mode": detection.get("mode", "unknown"),
+            **counts,
+            "records_analyzed": detection["records_analyzed"],
+        }
+        self.main_window.dashboard_needs_refresh = True
+        self.main_window.queue_refresh_after_workflow("Dashboard")
         self.status_label.setText(
-            f"Analyzed {detection['records_analyzed']} records; "
-            f"generated {result['alerts']['alerts_created']} alerts."
+            f"Analyzed {detection['records_analyzed']:,} records; "
+            f"{counts['Anomaly']:,} anomaly, {counts['Normal']:,} normal, "
+            f"{counts['Review']:,} review; "
+            f"generated {result['alerts']['alerts_created']:,} alerts."
         )
         if result.get("dataset_split_used") == "test":
             metrics = result.get("benchmark_evaluation", {})
             self.status_label.setText(
                 f"Evaluated official test split: "
                 f"{metrics.get('records_with_labels', 0):,} labeled records; "
-                f"{result['alerts']['alerts_created']:,} alerts; "
+                f"Anomaly: {counts['Anomaly']:,} | "
+                f"Normal: {counts['Normal']:,} | "
+                f"Review: {counts['Review']:,}; "
+                f"{result['alerts']['alerts_created']:,} anomaly alerts; "
                 f"accuracy {metrics.get('accuracy', 0):.1%}, "
                 f"attack recall {metrics.get('recall_attack', 0):.1%}."
             )
@@ -1329,14 +1499,14 @@ class DetectionPage(DataPage):
             )
         self.main_window.alerts_need_refresh = True
         self.main_window.dashboard_needs_refresh = True
+        self.main_window.queue_refresh_after_workflow(
+            "Alert Monitoring",
+            "Dashboard",
+        )
 
     @staticmethod
     def _classification(result: dict) -> str:
-        if result.get("verdict") in {"ANOMALY", "SUSPICIOUS"}:
-            return "Anomaly"
-        if result.get("verdict") in {"NORMAL_PATTERN", "NORMAL"}:
-            return "Normal"
-        return "Review"
+        return classify_result(result)
 
     @staticmethod
     def _format_score(value) -> str:
@@ -1352,7 +1522,14 @@ class DetectionPage(DataPage):
 
         row = selected[0].row()
         if row < len(self.detection_results):
-            self.show_json(self.detection_results[row])
+            result = self.detection_results[row]
+            self.show_json({
+                **result,
+                "classification": classify_result(result),
+                "classification_explanation": classification_explanation(
+                    result
+                ),
+            })
 
 
 class AlertsPage(DataPage):
@@ -1361,7 +1538,15 @@ class AlertsPage(DataPage):
             "Alert Monitoring",
             "Review model-generated alerts, acknowledge them, or resolve them "
             "with a documented note.",
-            ["Alert ID", "Severity", "Status", "Created", "User", "Source IP"],
+            [
+                "Alert ID",
+                "Classification",
+                "Severity",
+                "Status",
+                "Created",
+                "User",
+                "Source IP",
+            ],
             parent,
         )
         self.status_filter = QComboBox()
@@ -1393,6 +1578,7 @@ class AlertsPage(DataPage):
         self.set_rows([
             [
                 alert.get("alert_id"),
+                classify_result(alert),
                 alert.get("severity"),
                 alert.get("status"),
                 alert.get("created_at"),
@@ -1401,6 +1587,7 @@ class AlertsPage(DataPage):
             ]
             for alert in self.alerts
         ])
+        self.color_classification_cells(1)
         self.status_label.setText(f"Alerts shown: {len(self.alerts)}")
         self.main_window.alerts_need_refresh = False
 
@@ -1411,30 +1598,44 @@ class AlertsPage(DataPage):
             None,
         )
         if alert is not None:
-            self.show_json(alert)
+            self.show_json({
+                **alert,
+                "classification": classify_result(alert),
+                "classification_explanation": classification_explanation(
+                    alert
+                ),
+            })
 
     def update_selected(self, status: str) -> None:
         alert_id = self.selected_value()
         if not alert_id:
             self.report_error("Select an alert first.")
             return
-        from src.detection.alert_manager import AlertManager
-
         resolution = self.resolution.text().strip() if status == "RESOLVED" else None
-        try:
-            result = AlertManager(
-                storage_path=self.main_window.session_path(
-                    "logs",
-                    "alerts.jsonl",
-                )
-            ).update_status(alert_id, status, resolution=resolution)
-        except (ValueError, KeyError, OSError) as exc:
-            self.report_error(f"{type(exc).__name__}: {exc}")
+        if status == "RESOLVED" and not resolution:
+            self.report_error("A resolution note is required.")
             return
+        self.main_window.run_background(
+            "update_alert_status",
+            payload={
+                "alert_id": alert_id,
+                "status": status,
+                "resolution": resolution,
+            },
+            on_success=self.on_alert_updated,
+            page=self,
+        )
+
+    def on_alert_updated(self, result: dict) -> None:
+        status = result["alert"]["status"]
         self.status_label.setText(f"Alert {status.lower()}.")
         self.show_json(result)
-        self.refresh()
-        self.main_window.refresh_dashboard()
+        self.main_window.alerts_need_refresh = True
+        self.main_window.dashboard_needs_refresh = True
+        self.main_window.queue_refresh_after_workflow(
+            "Alert Monitoring",
+            "Dashboard",
+        )
 
     def acknowledge_selected(self) -> None:
         self.update_selected("ACKNOWLEDGED")
@@ -1453,6 +1654,8 @@ class InvestigationPage(DataPage):
             ["Report ID", "Alert ID", "Investigated at", "Model", "Status"],
             parent,
         )
+        self.reports: list[dict] = []
+        self.reports_need_refresh = True
         self.alert_select = QComboBox()
         refresh_alerts = QPushButton("Refresh alerts")
         investigate = QPushButton("Investigate")
@@ -1514,17 +1717,17 @@ class InvestigationPage(DataPage):
             f"Investigation status: {result.get('status', 'UNKNOWN')}"
         )
         self.show_json(result)
-        self.refresh_reports()
+        self.reports_need_refresh = True
+        self.main_window.queue_refresh_after_workflow("AI Investigation")
 
     def refresh_reports(self) -> None:
-        from src.investigation.manager import InvestigationManager
+        self.main_window.run_background(
+            "load_reports",
+            on_success=self.on_reports_loaded,
+            page=self,
+        )
 
-        reports = InvestigationManager(
-            report_dir=self.main_window.session_path(
-                "reports",
-                "investigations",
-            )
-        ).list_reports(limit=500)
+    def on_reports_loaded(self, reports: list[dict]) -> None:
         self.reports = reports
         self.set_rows([
             [
@@ -1537,22 +1740,24 @@ class InvestigationPage(DataPage):
             for item in reports
         ])
         self.status_label.setText(f"Investigation reports: {len(reports)}")
+        self.reports_need_refresh = False
 
     def show_selected_report(self) -> None:
         report_id = self.selected_value()
         if not report_id:
             return
-        from src.investigation.manager import InvestigationManager
+        self.main_window.run_background(
+            "load_report",
+            payload={"report_id": report_id},
+            on_success=self.on_report_loaded,
+            page=self,
+        )
 
-        document = InvestigationManager(
-            report_dir=self.main_window.session_path(
-                "reports",
-                "investigations",
-            )
-        ).get_report(report_id)
-        if document is not None:
-            self.show_json(document)
-
+    def on_report_loaded(self, document: dict | None) -> None:
+        if document is None:
+            self.status_label.setText("The selected report is no longer available.")
+            return
+        self.show_json(document)
 
 class ResponsePage(DataPage):
     def __init__(self, parent=None):
@@ -1564,6 +1769,8 @@ class ResponsePage(DataPage):
             ["Action ID", "Alert ID", "Action", "Status", "Created"],
             parent,
         )
+        self.actions: list[dict] = []
+        self.actions_need_refresh = True
         self.actor = QLineEdit("operator")
         self.actor.setPlaceholderText("Operator ID")
         self.reason = QLineEdit()
@@ -1604,7 +1811,14 @@ class ResponsePage(DataPage):
         )
 
     def refresh(self) -> None:
-        self.actions = self.engine().list_actions(limit=500)
+        self.main_window.run_background(
+            "load_response_actions",
+            on_success=self.on_actions_loaded,
+            page=self,
+        )
+
+    def on_actions_loaded(self, actions: list[dict]) -> None:
+        self.actions = actions
         self.set_rows([
             [
                 action.get("action_id"),
@@ -1616,6 +1830,7 @@ class ResponsePage(DataPage):
             for action in self.actions
         ])
         self.status_label.setText(f"Response proposals: {len(self.actions)}")
+        self.actions_need_refresh = False
 
     def selected_action(self) -> dict | None:
         action_id = self.selected_value()
@@ -1652,7 +1867,8 @@ class ResponsePage(DataPage):
             f"Created {result.get('action_count', 0)} pending-approval proposals."
         )
         self.show_json(result)
-        self.refresh()
+        self.actions_need_refresh = True
+        self.main_window.queue_refresh_after_workflow("Response Management")
 
     def approve_selected(self) -> None:
         action = self.selected_action()
@@ -1774,6 +1990,7 @@ class PreventionPage(DataPage):
         approve_button.clicked.connect(self.approve_and_simulate)
         history_button.clicked.connect(self.load_history)
         self.plan: dict | None = None
+        self.history_needs_refresh = True
 
     def choose_dataset(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -1907,6 +2124,7 @@ class PreventionPage(DataPage):
         )
 
     def on_simulation_complete(self, result: dict) -> None:
+        self.history_needs_refresh = True
         simulation = result["simulation"]
         self.status_label.setText(
             f"Simulation complete: {simulation['policies_approved']} approved "
@@ -1920,7 +2138,7 @@ class PreventionPage(DataPage):
                 decision.get("action", "—"),
                 decision.get("trigger_record_index", "—"),
                 decision.get("indicator_fingerprint", "—")[:16],
-                decision["detected_alert"],
+                "Yes" if decision["detected_alert"] else "No",
             ]
             for decision in simulation["decisions"]
         ])
@@ -1930,7 +2148,7 @@ class PreventionPage(DataPage):
             "Policy action",
             "Triggered by row",
             "Fingerprint",
-            "Model alert",
+            "Anomaly alert?",
         ])
         self.show_json({
             "plan": result["plan"],
@@ -1938,14 +2156,13 @@ class PreventionPage(DataPage):
         })
 
     def load_history(self) -> None:
-        from src.response.prevention import PreventionSimulator
+        self.main_window.run_background(
+            "load_prevention_history",
+            on_success=self.on_history_loaded,
+            page=self,
+        )
 
-        runs = PreventionSimulator(
-            audit_path=self.main_window.session_path(
-                "logs",
-                "prevention_simulations.jsonl",
-            )
-        ).list_runs(limit=500)
+    def on_history_loaded(self, runs: list[dict]) -> None:
         self.plan = None
         self.set_rows([
             [
@@ -1970,6 +2187,7 @@ class PreventionPage(DataPage):
             f"Offline prevention simulation runs: {len(runs)}"
         )
         self.show_json(runs)
+        self.history_needs_refresh = False
 
 
 class SystemStatusPage(DataPage):
@@ -1985,21 +2203,13 @@ class SystemStatusPage(DataPage):
         self.controls.addWidget(refresh)
 
     def refresh(self) -> None:
-        checks = [
-            ("Project root", APP_ROOT.is_dir(), str(APP_ROOT)),
-            ("Raw datasets", (APP_ROOT / "dataset" / "raw").is_dir(),
-             str(APP_ROOT / "dataset" / "raw")),
-            ("Processed datasets", (APP_ROOT / "dataset" / "processed").is_dir(),
-             str(APP_ROOT / "dataset" / "processed")),
-            ("Model directory", (APP_ROOT / "models").is_dir(),
-             str(APP_ROOT / "models")),
-            ("Alert storage", self.main_window.session_path(
-                "logs", "alerts.jsonl"
-            ).is_file(), str(self.main_window.session_path(
-                "logs", "alerts.jsonl"
-            ))),
-            ("Response execution", True, "SIMULATION ONLY; approval required"),
-        ]
+        self.main_window.run_background(
+            "load_system_status",
+            on_success=self.on_status_loaded,
+            page=self,
+        )
+
+    def on_status_loaded(self, checks: list[tuple[str, bool, str]]) -> None:
         self.set_rows([
             [name, "AVAILABLE" if available else "NOT FOUND", path]
             for name, available, path in checks
@@ -2087,6 +2297,18 @@ class DashboardPage(DataPage):
 
     def on_dashboard_loaded(self, result: dict) -> None:
         alert_stats = result["alert_stats"]
+        last_detection = self.main_window.last_detection_summary
+        if last_detection is None:
+            detection_state = "Not run this session"
+            detection_evidence = "Run detection to see normal/anomaly totals"
+        else:
+            detection_state = last_detection["mode"]
+            detection_evidence = (
+                f"Anomaly: {last_detection['Anomaly']:,} | "
+                f"Normal: {last_detection['Normal']:,} | "
+                f"Review: {last_detection['Review']:,} "
+                f"of {last_detection['records_analyzed']:,} records"
+            )
         self.set_rows([
             [
                 "Audit ingestion",
@@ -2103,6 +2325,7 @@ class DashboardPage(DataPage):
                 "SUPERVISED / ANOMALY",
                 f"{result['active_models']} active models",
             ],
+            ["Latest classification", detection_state, detection_evidence],
             ["Alert monitoring", "LOCAL JSONL", f"{alert_stats['total_alerts']} total; {alert_stats['open_alerts']} open"],
             ["AI investigation", "LOCAL OLLAMA", "Uses configured local provider/model"],
             ["Response control", "SIMULATION ONLY", "Manual approval required"],
@@ -2123,6 +2346,9 @@ class DBIDSDesktopApp(QMainWindow):
         self.workflow_worker: TaskWorker | None = None
         self.alerts_need_refresh = False
         self.dashboard_needs_refresh = False
+        self.registry_needs_refresh = False
+        self.last_detection_summary: dict | None = None
+        self._refresh_after_workflow: set[str] = set()
         self._loaded_pages = {"Dashboard"}
         from src.sessions import SessionManager
 
@@ -2287,6 +2513,10 @@ class DBIDSDesktopApp(QMainWindow):
                 color: #66B2FF;
                 font-size: 9pt;
             }
+            QLabel#classificationSummary {
+                color: #91CAFF;
+                font-weight: 600;
+            }
             QLabel#pageHeading {
                 color: #91CAFF;
                 font-size: 19pt;
@@ -2387,6 +2617,26 @@ class DBIDSDesktopApp(QMainWindow):
                 self._load_page(title)
             elif title == "Alert Monitoring" and self.alerts_need_refresh:
                 self.refresh_alerts()
+            elif title == "Model Registry" and self.registry_needs_refresh:
+                self.refresh_registry()
+            elif title == "AI Investigation" and self.alerts_need_refresh:
+                self.investigation_page.refresh_alerts()
+                self.queue_refresh_after_workflow("AI Investigation")
+            elif (
+                title == "AI Investigation"
+                and self.investigation_page.reports_need_refresh
+            ):
+                self.investigation_page.refresh_reports()
+            elif (
+                title == "Response Management"
+                and self.response_page.actions_need_refresh
+            ):
+                self.response_page.refresh()
+            elif (
+                title == "Prevention Simulation"
+                and self.prevention_page.history_needs_refresh
+            ):
+                self.prevention_page.load_history()
             elif title == "Dashboard" and self.dashboard_needs_refresh:
                 self.refresh_dashboard()
 
@@ -2401,7 +2651,7 @@ class DBIDSDesktopApp(QMainWindow):
             self.prevention_page.load_history()
         elif title == "AI Investigation":
             self.investigation_page.refresh_alerts()
-            self.investigation_page.refresh_reports()
+            self.queue_refresh_after_workflow("AI Investigation")
         elif title == "Response Management":
             self.response_page.refresh()
         elif title == "System Status":
@@ -2439,6 +2689,12 @@ class DBIDSDesktopApp(QMainWindow):
             "generate_report",
             "load_alerts",
             "load_dashboard",
+            "update_alert_status",
+            "load_reports",
+            "load_report",
+            "load_response_actions",
+            "load_prevention_history",
+            "load_system_status",
         }:
             payload = dict(payload or {})
             payload["session_root"] = str(self.current_session.root)
@@ -2449,13 +2705,17 @@ class DBIDSDesktopApp(QMainWindow):
             page.status_label.setText(f"{task.title()} started.")
             worker.status.connect(page.status_label.setText)
             worker.failed.connect(page.report_error)
-            if task in {"train", "detect"}:
-                page.progress_bar.setValue(0)
-                page.progress_bar.setVisible(True)
+            page.progress_bar.setValue(0)
+            page.progress_bar.setRange(
+                0,
+                100
+                if task in {"train", "detect", "update_alert_status"}
+                else 0,
+            )
+            page.progress_bar.setVisible(True)
+            if task in {"train", "detect", "update_alert_status"}:
                 worker.progress.connect(page.progress_bar.setValue)
-                worker.finished.connect(
-                    lambda: page.progress_bar.setVisible(False)
-                )
+            worker.finished.connect(page.progress_bar.hide)
         else:
             worker.failed.connect(
                 lambda message: QMessageBox.critical(
@@ -2473,6 +2733,35 @@ class DBIDSDesktopApp(QMainWindow):
             self.workflow_worker = None
         if worker is not None:
             worker.deleteLater()
+        pending = self._refresh_after_workflow
+        self._refresh_after_workflow = set()
+        current_page = self.current_page_label.text()
+        if current_page not in pending:
+            return
+        refreshers = {
+            "Dashboard": self.refresh_dashboard,
+            "Model Registry": self.refresh_registry,
+            "Alert Monitoring": self.refresh_alerts,
+            "AI Investigation": self.investigation_page.refresh_reports,
+            "Response Management": self.response_page.refresh,
+        }
+        refresher = refreshers.get(current_page)
+        if refresher is not None:
+            refresher()
+
+    def queue_refresh_after_workflow(self, *page_titles: str) -> None:
+        for title in page_titles:
+            self._refresh_after_workflow.add(title)
+            if title == "Dashboard":
+                self.dashboard_needs_refresh = True
+            elif title == "Model Registry":
+                self.registry_needs_refresh = True
+            elif title == "Alert Monitoring":
+                self.alerts_need_refresh = True
+            elif title == "AI Investigation":
+                self.investigation_page.reports_need_refresh = True
+            elif title == "Response Management":
+                self.response_page.actions_need_refresh = True
 
     def refresh_registry(self) -> None:
         self.registry_page.refresh()
@@ -2578,6 +2867,7 @@ class DBIDSDesktopApp(QMainWindow):
             )
             return
         self.restore_session_state()
+        self.last_detection_summary = None
         self.refresh_session_selector()
         self.refresh_session_pages()
 
@@ -2607,6 +2897,7 @@ class DBIDSDesktopApp(QMainWindow):
             )
             return
         self.restore_session_state()
+        self.last_detection_summary = None
         self.refresh_session_selector()
         self.refresh_session_pages()
         QMessageBox.information(

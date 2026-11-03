@@ -36,6 +36,10 @@ class ReportGeneratorTests(unittest.TestCase):
 
             self.assertEqual(report["alerts"]["total"], 1)
             self.assertEqual(len(report["alerts"]["latest"]), 1)
+            self.assertEqual(
+                report["alerts"]["latest"][0]["classification"],
+                "Anomaly",
+            )
             serialized_report = json.dumps(report)
             self.assertNotIn("192.0.2.1", serialized_report)
             self.assertNotIn("sensitive-user", serialized_report)
@@ -55,6 +59,7 @@ class ReportGeneratorTests(unittest.TestCase):
                     "created_at": "2026-01-01",
                     "severity": "HIGH",
                     "status": "NEW",
+                    "classification": "Anomaly",
                     "mode": "supervised",
                     "verdict": "<script>alert(1)</script>",
                     "record_index": 1,
@@ -76,6 +81,7 @@ class ReportGeneratorTests(unittest.TestCase):
             contents = written_path.read_text(encoding="utf-8")
 
             self.assertIn("&lt;script&gt;", contents)
+            self.assertIn("<th>Classification</th>", contents)
             self.assertNotIn("<script>alert(1)</script>", contents)
             with self.assertRaises(ValueError):
                 ReportGenerator().write_report(

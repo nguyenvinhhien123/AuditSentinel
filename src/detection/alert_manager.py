@@ -3,6 +3,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 import heapq
 import json
+import tempfile
 import uuid
 
 
@@ -310,6 +311,7 @@ class AlertManager:
         alert_id,
         new_status,
         resolution=None,
+        progress_callback=None,
     ):
         """Acknowledge or resolve an existing alert."""
 
@@ -326,39 +328,109 @@ class AlertManager:
                     "A resolution note is required"
                 )
 
-        alerts = self._read_alerts()
+        try:
+            total_bytes = self.storage_path.stat().st_size
+            source = self.storage_path.open("r", encoding="utf-8")
+        except OSError as exc:
+            raise RuntimeError(
+                f"Cannot read alert storage: {exc}"
+            ) from exc
 
-        target = next(
-            (
-                item for item in alerts
-                if item.get("alert_id") == alert_id
-            ),
-            None,
-        )
+        temporary_path = None
+        updated_alert = None
+        previous_status = None
+        last_progress = -1
+        try:
+            with source:
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    dir=self.storage_path.parent,
+                    prefix=f".{self.storage_path.name}.",
+                    suffix=".tmp",
+                    delete=False,
+                ) as output:
+                    temporary_path = Path(output.name)
+                    line_number = 0
+                    while True:
+                        try:
+                            line = source.readline()
+                        except OSError as exc:
+                            raise RuntimeError(
+                                f"Cannot read alert storage: {exc}"
+                            ) from exc
+                        if not line:
+                            break
+                        line_number += 1
 
-        if target is None:
-            raise KeyError(f"Unknown alert ID: {alert_id}")
+                        if not line.strip():
+                            output.write(line)
+                            continue
 
-        if target.get("status") == "RESOLVED":
-            raise ValueError("Resolved alerts cannot be changed")
+                        try:
+                            alert = json.loads(line)
+                        except json.JSONDecodeError as exc:
+                            raise ValueError(
+                                f"Invalid alert JSON on line {line_number}"
+                            ) from exc
 
-        if (
-            target.get("status") == "ACKNOWLEDGED"
-            and new_status == "ACKNOWLEDGED"
-        ):
-            raise ValueError("Alert is already acknowledged")
+                        if not isinstance(alert, dict):
+                            raise ValueError(
+                                f"Invalid alert record on line {line_number}"
+                            )
 
-        target["status"] = new_status
-        target["updated_at"] = self._now()
+                        if (
+                            updated_alert is None
+                            and alert.get("alert_id") == alert_id
+                        ):
+                            previous_status = alert.get("status")
+                            alert["status"] = new_status
+                            alert["updated_at"] = self._now()
+                            if new_status == "RESOLVED":
+                                alert["resolution"] = resolution.strip()
+                            updated_alert = alert
+                            output.write(
+                                json.dumps(alert, ensure_ascii=False) + "\n"
+                            )
+                        else:
+                            output.write(line)
 
-        if new_status == "RESOLVED":
-            target["resolution"] = resolution.strip()
+                        if progress_callback is not None:
+                            progress = min(
+                                99,
+                                int(
+                                    source.tell()
+                                    * 100
+                                    / max(total_bytes, 1)
+                                ),
+                            )
+                            if progress != last_progress:
+                                progress_callback(progress)
+                                last_progress = progress
 
-        self._write_alerts(alerts)
+            if updated_alert is None:
+                raise KeyError(f"Unknown alert ID: {alert_id}")
+            if previous_status == "RESOLVED":
+                raise ValueError("Resolved alerts cannot be changed")
+            if (
+                previous_status == "ACKNOWLEDGED"
+                and new_status == "ACKNOWLEDGED"
+            ):
+                raise ValueError("Alert is already acknowledged")
+
+            temporary_path.replace(self.storage_path)
+            if progress_callback is not None:
+                progress_callback(100)
+        finally:
+            if (
+                temporary_path is not None
+                and temporary_path.exists()
+            ):
+                temporary_path.unlink()
 
         return {
             "status": "UPDATED",
-            "alert": target,
+            "alert": updated_alert,
         }
 
     def get_statistics(self):
